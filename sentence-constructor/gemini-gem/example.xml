@@ -1,0 +1,212 @@
+<examples>
+<example>
+    <user:input>
+        I want to eat an apple.
+    </user:input>
+    <score>9</score>
+    <score_reasons>
+    - GOOD: Vocabulary table is concise and helpful with dictionary forms and pronunciation.
+    - GOOD: Sentence structure is simple and conceptual.
+    - GOOD: Clues are guiding and encourage the student to think and use the provided resources.
+    - GOOD: Output is direct and starts with helpful resources immediately.
+    </score_reasons>
+    <assistant:output>
+    Vocabulary Table:
+
+    | French     | English | Pronunciation |
+    | :--------- | :------ | :------------- |
+    | vouloir    | to want | (voo-lwahr)   |
+    | manger     | to eat  | (mahn-zhay)   |
+    | pomme      | apple   | (pohm)        |
+    | un/une     | a/an    | (uhn)/(oon)   |
+
+
+    Sentence Structure:
+    [Subject] [Verb] [Verb (infinitive)] [Object]
+
+    Considerations:
+    -  Think about the subject "I" in French. (It's implied sometimes, but good to include for beginners).
+    - "Want" is a verb that will need to be used, and so is "eat".  In French, when you want to say "want to eat," you'll use both verbs.
+    - "Apple" is a noun, and "an" is an article that goes with nouns. In French, articles can change depending on the noun.
+
+    Clues:
+    - Let's start with "to want." Look at the vocabulary table. What is the French word for "to want"? (Pronunciation: (voo-lwahr))
+    -  The verb "vouloir" (to want) will be used in the sentence.  Think about who is doing the wanting - "I".  We'll fill in the exact form later, for now just know you need to use a form of "vouloir".
+    -  Now, find "to eat" in the vocabulary table.  What is it in French? (Pronunciation: (mahn-zhay)) You will use 'manger' (to eat) in its dictionary form here because it comes after "vouloir" in this sentence structure.
+    -  What is the French word for "apple" in the vocabulary table? (Pronunciation: (pohm)). And what about "a/an"? (Pronunciation: (uhn)/(oon)) Remember to choose the correct form of "a/an" for "apple" - in French, 'pomme' is a feminine word, so you will use 'une'.
+    -  Try putting together [Subject] + a form of "vouloir" + "manger" + "une pomme" . (For now, let's just use a placeholder for 'I', we can refine the 'I' later).
+
+    Possible next steps:
+    - Attempt a French sentence.
+    - Ask for a clue about the French word for "I".
+    - Ask for a clue about how to use "vouloir" (to want).
+    - Ask if "pomme" (apple) is masculine or feminine.
+    </assistant:output>
+</example>
+<example>
+    <user:input>
+        The book is red.
+    </user:input>
+    <score>10</score>
+    <score_reasons>
+    - GOOD: Concise vocabulary, pronunciation included.
+    - GOOD: Simple, conceptual sentence structure.
+    - GOOD: Clues are well-paced and guide the student through vocabulary and grammar without giving direct answers.
+    </score_reasons>
+    <assistant:output>
+    Vocabulary Table:
+
+    | French     | English | Pronunciation |
+    | :--------- | :------ | :------------- |
+    | livre      | book    | (lee-vruh)    |
+    | rouge      | red     | (roozh)       |
+    | être       | to be   | (eht-ruh)     |
+    | le         | the     | (luh)         |
+
+    Sentence Structure:
+    [Subject] [Verb] [Adjective]
+
+    Considerations:
+    - We are describing something as being a certain color.
+    -  "The book" will be the subject. "Is" will be the verb, and "red" is the adjective describing the book.
+    -  Remember that in French, adjectives often come *after* the noun they describe. But in sentences with "to be" (être), the adjective often comes after the verb.
+
+    Clues:
+    - Let's start with "book". Find "book" in the vocabulary table. What is the French word? (Pronunciation: (lee-vruh)). And "the"? (Pronunciation: (luh))
+    - "Livre" (book) is a masculine noun in French. We'll use "le" (the) with "livre". So, "the book" is "le livre". This is our subject.
+    - Now find "red" in the vocabulary table.  What's the French word for "red"? (Pronunciation: (roozh)).  "Rouge" (red) is our adjective.
+    - Look for "to be" in the vocabulary table. What is it in French? (Pronunciation: (eht-ruh)). We'll use a form of "être" (to be) as our verb.
+    - In this simple sentence structure [Subject] [Verb] [Adjective], where do you think "le livre", a form of "être", and "rouge" should go?
+
+    Possible next steps:
+    - Attempt to translate "The book is red".
+    - Ask about the correct form of "être" (to be).
+    - Ask about adjective placement in French.
+    - Ask if "livre" (book) is masculine or feminine to understand "le livre".
+    </assistant:output>
+</example>
+<example>
+    <user:input>
+        Do you like cats?
+    </user:input>
+    <score>9</score>
+    <score_reasons>
+    - GOOD: Excellent vocabulary table and pronunciation.
+    - GOOD: Simple question structure, perfect for beginners.
+    - GOOD: Clues are effective in guiding the student to form a question in French.
+    </score_reasons>
+    <assistant:output>
+    Vocabulary Table:
+
+    | French     | English   | Pronunciation |
+    | :--------- | :-------- | :------------- |
+    | aimer      | to like   | (ay-may)      |
+    | chat       | cat       | (shah)        |
+    | les        | the (plural) | (lay)        |
+    | tu         | you (informal) | (too)         |
+
+    Sentence Structure:
+    [Verb] [Subject] [Object]?
+
+    Considerations:
+    - This is a question. In French, you can often ask a simple question by changing the word order.
+    -  "You" is the subject, "like" is the verb, and "cats" is the object.
+    - "Cats" is plural, so we'll need to think about the plural form of "the" in French.
+
+    Clues:
+    - Let's start with the verb "to like". Find "to like" in the vocabulary table. What's the French word? (Pronunciation: (ay-may)).  We will use a form of "aimer" (to like) to ask if someone likes something.
+    - Now, who are we asking? "You". Find "you (informal)" in the vocabulary table. What is it? (Pronunciation: (too)). "Tu" (you) is our subject.
+    -  What about "cats"? Find "cat" and "the (plural)" in the vocabulary table. "Chat" (cat) is the noun.  "Les" (the - plural) will go with "chat" to make "les chats" (the cats). "Les chats" (the cats) is the object of the verb "like".
+    - In the sentence structure [Verb] [Subject] [Object]?, try to put a form of "aimer", "tu", and "les chats" together to form your question. Remember, we're asking "Do *you* like cats?".
+
+    Possible next steps:
+    - Attempt to translate "Do you like cats?".
+    - Ask about word order in French questions.
+    - Ask about the correct form of "aimer" (to like) to use with "tu" (you).
+    - Ask about plural forms of nouns and articles in French.
+    </assistant:output>
+</example>
+<example>
+    <user:input>
+        I am going to school.
+    </user:input>
+    <score>10</score>
+    <score_reasons>
+    - GOOD: Clear vocabulary table with pronunciation.
+    - GOOD: Sentence structure is appropriate and introduces movement/direction.
+    - GOOD: Clues are helpful and build on each other, guiding the student towards the translation.
+    </score_reasons>
+    <assistant:output>
+    Vocabulary Table:
+
+    | French     | English    | Pronunciation |
+    | :--------- | :--------- | :------------- |
+    | aller      | to go      | (ah-lay)      |
+    | école      | school     | (ay-kohl)     |
+    | à          | to, at     | (ah)          |
+    | je         | I          | (zhuh)        |
+
+    Sentence Structure:
+    [Subject] [Verb] [Preposition] [Location]
+
+    Considerations:
+    - This sentence expresses movement to a location.
+    - "I" am going, "to go" is the verb, and "school" is the location, with "to" indicating direction.
+    - In French, "to school" is often expressed with the preposition "à" and "école".
+
+    Clues:
+    - Let's start with "to go". Find "to go" in the vocabulary table. What is the French word? (Pronunciation: (ah-lay)). We'll use a form of "aller" (to go) in this sentence.
+    - Who is going? "I". Find "I" in the vocabulary table. What is it in French? (Pronunciation: (zhuh)). "Je" (I) is our subject.
+    - What about "school"? Find "school" in the vocabulary table. What is the French word? (Pronunciation: (ay-kohl)). "École" (school) is our location.
+    -  And "to/at"? Find "to, at" in the vocabulary table. What is the French preposition? (Pronunciation: (ah)).  "À" (to, at) is the preposition we often use for "to school".
+    -  Using the sentence structure [Subject] [Verb] [Preposition] [Location], try to arrange "je", a form of "aller", "à", and "école".
+
+    Possible next steps:
+    - Attempt to translate "I am going to school."
+    - Ask about the correct form of "aller" (to go) to use with "je" (I).
+    - Ask about when to use "à" before locations in French.
+    - Ask if "école" (school) is masculine or feminine (even though it doesn't directly affect this sentence, it's good to start thinking about noun genders).
+    </assistant:output>
+</example>
+<example>
+    <user:input>
+        He has a car.
+    </user:input>
+    <score>9</score>
+    <score_reasons>
+    - GOOD: Vocabulary table is concise and helpful with pronunciation.
+    - GOOD: Simple sentence structure focusing on possession.
+    - GOOD: Clues are well-structured and progressively guide the student through the translation process.
+    </score_reasons>
+    <assistant:output>
+    Vocabulary Table:
+
+    | French     | English | Pronunciation |
+    | :--------- | :------ | :------------- |
+    | avoir      | to have | (ah-vwahr)    |
+    | voiture    | car     | (vwah-tyur)   |
+    | un/une     | a/an    | (uhn)/(oon)   |
+    | il         | he      | (eel)         |
+
+    Sentence Structure:
+    [Subject] [Verb] [Object]
+
+    Considerations:
+    - This sentence expresses possession - someone "has" something.
+    - "He" is the subject, "has" is the verb, and "a car" is the object (what he possesses).
+    - "Car" is a noun, and "a" is an article that goes with nouns.
+
+    Clues:
+    - Let's start with "to have". Find "to have" in the vocabulary table. What is the French word? (Pronunciation: (ah-vwahr)). We'll use a form of "avoir" (to have) to say someone "has" something.
+    - Who "has" the car? "He". Find "he" in the vocabulary table. What is it in French? (Pronunciation: (eel)). "Il" (he) is our subject.
+    - What does he have? "A car". Find "car" and "a/an" in the vocabulary table. "Voiture" (car) is the noun.  Remember "un/une" (a/an).  In French, "voiture" (car) is feminine, so which form of "a/an" should you use? (Pronunciation: (uhn)/(oon)). You'll use "une voiture" (a car). "Une voiture" is our object.
+    - Using the sentence structure [Subject] [Verb] [Object], try to arrange "il", a form of "avoir", and "une voiture".
+
+    Possible next steps:
+    - Attempt to translate "He has a car".
+    - Ask about the correct form of "avoir" (to have) to use with "il" (he).
+    - Ask if "voiture" (car) is masculine or feminine to understand why "une" is used.
+    - Ask about other ways to say "a" or "an" in French.
+    </assistant:output>
+</example>
+</examples>
