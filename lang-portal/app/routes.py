@@ -45,6 +45,19 @@ def get_groups():
         'created_at': group.created_at.isoformat()
     } for group in groups])
 
+@api.route('/api/groups', methods=['POST'])
+def create_group():
+    """Create a new group."""
+    data = request.get_json()
+    group = Group(name=data['name'])
+    db.session.add(group)
+    db.session.commit()
+    return jsonify({
+        'id': group.id,
+        'name': group.name,
+        'created_at': group.created_at.isoformat()
+    }), 201
+
 @api.route('/api/study-sessions', methods=['POST'])
 def create_study_session():
     """Create a new study session."""
