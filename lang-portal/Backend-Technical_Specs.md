@@ -10,6 +10,7 @@ A language learning school wants to build a prototype of learning portal which w
 
 ## Technical Specs:
 - Flask backend
+- Python 3 code for backend[sudo] password for biswan02:[sudo] password for biswan02:
 - SQLite3 database
 - REST API
 - Unit testing
