@@ -68,7 +68,7 @@ def test_database_relationships(test_database):
     review = WordReviewItem(
         word_id=word.id,
         study_session_id=session.id,
-        correct=True
+        is_correct=True
     )
     test_database.session.add(review)
     

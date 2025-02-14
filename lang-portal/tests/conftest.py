@@ -1,24 +1,23 @@
 import pytest
-from app import create_app
-from app.models import db, Word, Group, StudySession, StudyActivity, WordReviewItem
+from app import create_app, db
+from app.models import Word, Group, StudySession, StudyActivity, WordReviewItem
 
 @pytest.fixture
 def app():
-    """Create and configure a new app instance for each test."""
-    app = create_app({
-        'TESTING': True,
-        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'
-    })
+    """Create application for the tests."""
+    app = create_app('testing')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.config['TESTING'] = True
     return app
 
 @pytest.fixture
 def client(app):
-    """A test client for the app."""
+    """Create a test client for the app."""
     return app.test_client()
 
 @pytest.fixture
-def test_database(app):
-    """Create a fresh database for each test."""
+def _db(app):
+    """Create database for the tests."""
     with app.app_context():
         db.create_all()
         yield db
@@ -26,49 +25,39 @@ def test_database(app):
         db.drop_all()
 
 @pytest.fixture
-def runner(app):
-    """A test CLI runner for the app."""
-    return app.test_cli_runner()
+def test_database(_db):
+    """Create a fresh test database."""
+    return _db
 
 @pytest.fixture
-def populated_test_database(app):
-    """Create test database with sample data."""
-    with app.app_context():
-        # Create sample word
-        word = Word(french='bonjour', english='hello', parts='{"part_of_speech": "interjection"}')
-        db.session.add(word)
-        
-        # Create sample group
-        group = Group(name='Greetings')
-        db.session.add(group)
-        
-        # Add word to group
-        group.words.append(word)
-        
-        # Create study activity
-        activity = StudyActivity(
-            name='Basic Greetings Quiz',
-            description='Practice basic greeting words',
-            group_id=1
-        )
-        db.session.add(activity)
-        db.session.flush()  # Get the activity ID
-        
-        # Create study session
-        study_session = StudySession(
-            group_id=1,
-            study_activity_id=activity.id
-        )
-        db.session.add(study_session)
-        
-        # Create word review
-        word_review = WordReviewItem(
-            word_id=1,
-            study_session_id=1,
-            correct=True
-        )
-        db.session.add(word_review)
-        
-        db.session.commit()
-        
-        yield db
+def populated_test_database(_db):
+    """Create a test database populated with sample data."""
+    # Create sample words
+    word1 = Word(french='bonjour', english='hello', parts={'part_of_speech': 'interjection'})
+    _db.session.add(word1)
+    _db.session.flush()
+    
+    # Create sample groups
+    group1 = Group(name='Basic Greetings')
+    _db.session.add(group1)
+    _db.session.flush()
+    
+    # Add words to groups
+    group1.words.append(word1)
+    
+    # Create sample study activities
+    activity1 = StudyActivity(name='Flashcards', group_id=group1.id)
+    _db.session.add(activity1)
+    _db.session.flush()
+    
+    # Create sample study sessions
+    session1 = StudySession(group_id=group1.id, study_activity_id=activity1.id)
+    _db.session.add(session1)
+    _db.session.flush()
+    
+    # Create sample word reviews
+    review1 = WordReviewItem(word_id=word1.id, study_session_id=session1.id, is_correct=True)
+    _db.session.add(review1)
+    _db.session.commit()
+    
+    return _db

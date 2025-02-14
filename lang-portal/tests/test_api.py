@@ -1,114 +1,135 @@
 import pytest
-import json
-from app.models import Word, Group, StudyActivity, StudySession
+from flask import json
+from app.models import Word, Group, StudySession, StudyActivity
 
-def test_get_words(client, test_database):
-    """Test getting all words."""
-    # Create test word
-    word = Word(french='bonjour', english='hello', parts='{"part_of_speech": "interjection"}')
-    test_database.session.add(word)
-    test_database.session.commit()
-    
+def test_get_words_success(client, populated_test_database):
+    """Test successful GET /api/words endpoint."""
     response = client.get('/api/words')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert len(data) > 0
-    assert 'french' in data[0]
-    assert data[0]['french'] == 'bonjour'
+    assert 'items' in data
+    assert 'pagination' in data
+    assert len(data['items']) > 0
+    assert all(key in data['items'][0] for key in ['id', 'french', 'english', 'parts'])
 
-def test_create_word(client, test_database):
-    """Test creating a new word."""
+def test_create_word_success(client, test_database):
+    """Test successful POST /api/words endpoint."""
     word_data = {
-        'french': 'chat',
-        'english': 'cat',
-        'parts': {'part_of_speech': 'noun'}
+        'french': 'merci',
+        'english': 'thank you',
+        'parts': {'part_of_speech': 'interjection'}
     }
-    response = client.post('/api/words',
-                         data=json.dumps(word_data),
-                         content_type='application/json')
+    response = client.post('/api/words', 
+                          data=json.dumps(word_data),
+                          content_type='application/json')
     assert response.status_code == 201
     data = json.loads(response.data)
-    assert data['french'] == 'chat'
-    assert data['english'] == 'cat'
-    assert data['parts']['part_of_speech'] == 'noun'
+    assert data['french'] == word_data['french']
+    assert data['english'] == word_data['english']
+    assert data['parts'] == word_data['parts']
 
-def test_get_groups(client, test_database):
-    """Test getting all groups."""
-    # Create test group
-    group = Group(name='Test Group')
-    test_database.session.add(group)
-    test_database.session.commit()
-    
+def test_create_word_invalid_data(client, test_database):
+    """Test POST /api/words with invalid data."""
+    invalid_data = {'french': 'merci'}  # Missing required 'english' field
+    response = client.post('/api/words', 
+                          data=json.dumps(invalid_data),
+                          content_type='application/json')
+    assert response.status_code == 400
+
+def test_get_groups_success(client, populated_test_database):
+    """Test successful GET /api/groups endpoint."""
     response = client.get('/api/groups')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert len(data) > 0
-    assert 'name' in data[0]
-    assert data[0]['name'] == 'Test Group'
+    assert 'items' in data
+    assert 'pagination' in data
+    assert len(data['items']) > 0
+    assert all(key in data['items'][0] for key in ['id', 'name', 'word_count'])
 
-def test_create_study_session(client, test_database):
-    """Test creating a new study session."""
-    # Create test group and activity first
-    group = Group(name='Test Group')
-    test_database.session.add(group)
-    test_database.session.commit()
+def test_create_group_success(client, test_database):
+    """Test successful POST /api/groups endpoint."""
+    group_data = {'name': 'Test Group'}
+    response = client.post('/api/groups',
+                          data=json.dumps(group_data),
+                          content_type='application/json')
+    assert response.status_code == 201
+    data = json.loads(response.data)
+    assert data['name'] == group_data['name']
+
+def test_create_group_invalid_data(client, test_database):
+    """Test POST /api/groups with invalid data."""
+    invalid_data = {}  # Missing required 'name' field
+    response = client.post('/api/groups',
+                          data=json.dumps(invalid_data),
+                          content_type='application/json')
+    assert response.status_code == 400
+
+def test_create_study_session_success(client, populated_test_database):
+    """Test successful POST /api/study_sessions endpoint."""
+    # Create test data
+    group = Group(name="Test Group")
+    populated_test_database.session.add(group)
+    populated_test_database.session.flush()
     
-    activity = StudyActivity(
-        name='Test Activity',
-        description='Test Description',
-        group_id=group.id
-    )
-    test_database.session.add(activity)
-    test_database.session.commit()
+    activity = StudyActivity(name="Test Activity")
+    populated_test_database.session.add(activity)
+    populated_test_database.session.commit()
     
     session_data = {
         'group_id': group.id,
         'study_activity_id': activity.id
     }
-    response = client.post('/api/study-sessions',
-                         data=json.dumps(session_data),
-                         content_type='application/json')
+    response = client.post('/api/study_sessions',
+                          data=json.dumps(session_data),
+                          content_type='application/json')
     assert response.status_code == 201
     data = json.loads(response.data)
-    assert data['group_id'] == group.id
-    assert data['study_activity_id'] == activity.id
+    assert data['group_id'] == session_data['group_id']
+    assert data['study_activity_id'] == session_data['study_activity_id']
 
-def test_add_word_review(client, test_database):
-    """Test adding a word review."""
-    # Create test word, group, activity, and session first
-    word = Word(french='test', english='test')
-    test_database.session.add(word)
-    test_database.session.commit()
+def test_create_study_session_invalid_data(client, test_database):
+    """Test POST /api/study_sessions with invalid data."""
+    invalid_data = {'group_id': 999}  # Invalid group_id and missing study_activity_id
+    response = client.post('/api/study_sessions',
+                          data=json.dumps(invalid_data),
+                          content_type='application/json')
+    assert response.status_code == 400
+
+def test_word_review_success(client, populated_test_database):
+    """Test successful POST /api/study_sessions/:id/words/:word_id/review endpoint."""
+    # Create test data
+    word = Word(french="test", english="test")
+    populated_test_database.session.add(word)
+    populated_test_database.session.flush()
     
-    group = Group(name='Test Group')
-    test_database.session.add(group)
-    test_database.session.commit()
+    group = Group(name="Test Group")
+    populated_test_database.session.add(group)
+    populated_test_database.session.flush()
     
-    activity = StudyActivity(
-        name='Test Activity',
-        description='Test Description',
-        group_id=group.id
-    )
-    test_database.session.add(activity)
-    test_database.session.commit()
+    activity = StudyActivity(name="Test Activity")
+    populated_test_database.session.add(activity)
+    populated_test_database.session.flush()
     
     session = StudySession(
         group_id=group.id,
         study_activity_id=activity.id
     )
-    test_database.session.add(session)
-    test_database.session.commit()
+    populated_test_database.session.add(session)
+    populated_test_database.session.commit()
     
-    review_data = {
-        'word_id': word.id,
-        'study_session_id': session.id,
-        'correct': True
-    }
-    response = client.post('/api/word-reviews',
-                         data=json.dumps(review_data),
-                         content_type='application/json')
+    review_data = {'is_correct': True}
+    response = client.post(f'/api/study_sessions/{session.id}/words/{word.id}/review',
+                          data=json.dumps(review_data),
+                          content_type='application/json')
     assert response.status_code == 201
     data = json.loads(response.data)
     assert data['word_id'] == word.id
     assert data['study_session_id'] == session.id
-    assert data['correct'] is True
+    assert data['is_correct'] == review_data['is_correct']
+
+def test_word_review_invalid_data(client, test_database):
+    """Test POST /api/study_sessions/:id/words/:word_id/review with invalid data."""
+    response = client.post('/api/study_sessions/999/words/999/review',
+                          data=json.dumps({'is_correct': True}),
+                          content_type='application/json')
+    assert response.status_code == 404

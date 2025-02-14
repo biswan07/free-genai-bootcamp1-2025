@@ -83,12 +83,12 @@ def test_word_review_item(test_database):
     review = WordReviewItem(
         word_id=word.id,
         study_session_id=session.id,
-        correct=True
+        is_correct=True
     )
     test_database.session.add(review)
     test_database.session.commit()
     
-    assert review.correct is True
+    assert review.is_correct is True
     assert isinstance(review.created_at, datetime)
     assert review.word == word
     assert review.study_session == session
