@@ -30,7 +30,7 @@ and act as the default page when a user visit the web-app
 
 - GET /api/dashboard/last_study_session
 - GET /api/dashboard/study_progress
-- GET /api/dashboard/quick_stats
+- GET /api/dashboard/quick-stats
 
 ### Study Activities Index `/study_activities`
 
@@ -71,6 +71,7 @@ The purpose of this page is to show the details of a study activity and its past
 #### Needed API Endpoints
 - GET /api/study_activities/:id
 - GET /api/study_activities/:id/study_sessions
+- POST /api/study_activities
 
 ### Study Activities Launch `/study_activities/:id/launch`
 
@@ -108,6 +109,7 @@ The purpose of this page is to show all words in our database.
 
 #### Needed API Endpoints
 - GET /api/words
+- GET /api/words/:id
 
 ### Word Show `/words/:id`
 
@@ -125,7 +127,7 @@ The purpose of this page is to show information about a specific word.
     - when group name is clicked it will take us to the group show page
 
 #### Needed API Endpoints
-- GET /API/words/:id
+- GET /api/words/:id
 
 ### Word Groups Index `/groups`
 
@@ -141,7 +143,9 @@ The purpose of this page is to show a list of groups in our database.
 
 #### Needed API Endpoints
 - GET /api/groups
-
+- GET /api/groups/:id
+- GET /api/groups/:id/words
+- GET /api/groups/:id/study_sessions
 
 ### Group Show `/groups/:id`
 
@@ -180,6 +184,8 @@ The purpose of this page is to show a list of study sessions in our database.
 
 #### Needed API Endpoints
 - GET /api/study_sessions
+- GET /api/study_sessions/:id
+- GET /api/study_sessions/:id/words
 
 ### Study Session Show `/study_sessions/:id`
 
@@ -197,6 +203,7 @@ The purpose of this page is to show information about a specific study session.
     - Should use the same component as the words index page
 
 #### Needed API Endpoints
+- GET /api/study_sessions
 - GET /api/study_sessions/:id
 - GET /api/study_sessions/:id/words
 
