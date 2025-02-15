@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV '/home/biswan02/free-genai-bootcamp1-2025 -Windsurf/free-genai-bootcamp1-2025/lang-portal/venv'
+set -gx VIRTUAL_ENV /home/biswan02/free-genai-bootcamp1-2025_Windsurf/free-genai-bootcamp1-2025/lang-portal/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

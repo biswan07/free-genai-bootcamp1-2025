@@ -25,17 +25,34 @@ def internal_error(error):
 def get_last_study_session():
     """Get information about the most recent study session."""
     try:
-        last_session = StudySession.query.order_by(desc(StudySession.created_at)).first()
+        last_session = StudySession.query.order_by(StudySession.created_at.desc()).first()
+        
         if not last_session:
-            return jsonify({"message": "No study sessions found"}), 404
-            
-        group = Group.query.get(last_session.group_id)
+            return jsonify({
+                "message": "No study sessions yet",
+                "has_sessions": False
+            })
+        
+        # Get associated activity and group
+        activity = StudyActivity.query.get(last_session.study_activity_id)
+        group = Group.query.get(last_session.group_id) if last_session.group_id else None
+        
+        # Calculate session stats
+        word_reviews = WordReviewItem.query.filter_by(study_session_id=last_session.id).all()
+        total_words = len(word_reviews)
+        correct_words = len([r for r in word_reviews if r.is_correct])
+        
         return jsonify({
+            "has_sessions": True,
             "id": last_session.id,
-            "group_id": last_session.group_id,
             "created_at": last_session.created_at.isoformat(),
-            "study_activity_id": last_session.study_activity_id,
-            "group_name": group.name if group else None
+            "activity_name": activity.name if activity else None,
+            "group_name": group.name if group else None,
+            "stats": {
+                "total_words": total_words,
+                "correct_words": correct_words,
+                "accuracy": round((correct_words / total_words * 100) if total_words > 0 else 0, 1)
+            }
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -54,12 +71,38 @@ def get_study_progress():
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
 
-@api.route('/api/dashboard/quick-stats')
+@api.route('/api/dashboard/quick_stats')
 def get_dashboard_quick_stats():
     """Get quick overview statistics."""
     try:
-        stats = get_quick_stats()
-        return jsonify(stats)
+        # Get total words
+        total_words = Word.query.count()
+        
+        # Get total groups
+        total_groups = Group.query.count()
+        
+        # Get total study sessions
+        total_sessions = StudySession.query.count()
+        
+        # Calculate study streak (simplified version)
+        last_session = StudySession.query.order_by(StudySession.created_at.desc()).first()
+        study_streak = 0
+        if last_session:
+            today = datetime.utcnow().date()
+            last_study_date = last_session.created_at.date()
+            if last_study_date == today:
+                study_streak = 1
+        
+        # Get words studied (unique words that have been reviewed)
+        words_studied = WordReviewItem.query.with_entities(WordReviewItem.word_id).distinct().count()
+        
+        return jsonify({
+            "total_words": total_words,
+            "total_groups": total_groups,
+            "study_sessions": total_sessions,
+            "study_streak": study_streak,
+            "words_studied": words_studied
+        })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
 
@@ -68,46 +111,28 @@ def get_dashboard_quick_stats():
 def get_words():
     """Get all words with pagination."""
     try:
-        query = Word.query
-        items = query.all()
-        
-        # Convert SQLAlchemy objects to dictionaries and add stats
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'french': item.french,
-                'english': item.english,
-                'parts': item.parts_dict,
-                'created_at': item.created_at.isoformat()
-            }
-            stats = get_word_stats(item.id)
-            item_dict.update({
-                'correct_count': stats['correct_count'],
-                'wrong_count': stats['wrong_count']
-            })
-            items_dict.append(item_dict)
-        
-        # Manual pagination
         page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        per_page = request.args.get('per_page', 10, type=int)
         
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        pagination = Word.query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'words': [{
+                'id': word.id,
+                'english': word.english,
+                'french': word.french,
+                'stats': word.stats
+            } for word in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
         })
     except SQLAlchemyError as e:
-        return jsonify({'error': 'Database error', 'message': str(e)}), 500
+        return jsonify({"error": "Database error", "message": str(e)}), 500
 
 @api.route('/api/words/<int:word_id>')
 def get_word(word_id):
@@ -167,40 +192,27 @@ def create_word():
 def get_groups():
     """Get all groups with pagination."""
     try:
-        query = Group.query
-        items = query.all()
-        
-        # Convert SQLAlchemy objects to dictionaries and add word count
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'name': item.name,
-                'word_count': len(item.words),
-                'created_at': item.created_at.isoformat()
-            }
-            items_dict.append(item_dict)
-        
-        # Manual pagination
         page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        per_page = request.args.get('per_page', 10, type=int)
         
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        pagination = Group.query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'groups': [{
+                'id': group.id,
+                'name': group.name,
+                'word_count': len(group.words)
+            } for group in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
         })
     except SQLAlchemyError as e:
-        return jsonify({'error': 'Database error', 'message': str(e)}), 500
+        return jsonify({"error": "Database error", "message": str(e)}), 500
 
 @api.route('/api/groups', methods=['POST'])
 def create_group():
@@ -248,43 +260,25 @@ def get_group_words(group_id):
         if not group:
             return jsonify({"error": "Group not found"}), 404
             
-        query = Word.query.join(Word.groups).filter(Group.id == group_id)
-        items = query.all()
-        
-        # Convert SQLAlchemy objects to dictionaries and add stats
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'french': item.french,
-                'english': item.english,
-                'parts': item.parts_dict,
-                'created_at': item.created_at.isoformat()
-            }
-            stats = get_word_stats(item.id)
-            item_dict.update({
-                'correct_count': stats['correct_count'],
-                'wrong_count': stats['wrong_count']
-            })
-            items_dict.append(item_dict)
-        
-        # Manual pagination
         page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        per_page = request.args.get('per_page', 10, type=int)
         
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        # Use Word query with join instead of group.words
+        pagination = Word.query.join(Word.groups).filter(Group.id == group_id).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'words': [{
+                'id': word.id,
+                'english': word.english,
+                'french': word.french
+            } for word in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -297,47 +291,38 @@ def get_group_study_sessions(group_id):
         if not group:
             return jsonify({"error": "Group not found"}), 404
             
-        query = StudySession.query.filter_by(group_id=group_id)
-        items = query.all()
-        
-        # Convert SQLAlchemy objects to dictionaries and add additional information
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'group_id': item.group_id,
-                'study_activity_id': item.study_activity_id,
-                'created_at': item.created_at.isoformat()
-            }
-            activity = StudyActivity.query.get(item.study_activity_id)
-            review_count = WordReviewItem.query.filter_by(study_session_id=item.id).count()
-            
-            item_dict.update({
-                "activity_name": activity.name if activity else None,
-                "group_name": group.name,
-                "start_time": item_dict["created_at"],
-                "end_time": (item.created_at + timedelta(minutes=10)).isoformat(),  # Assuming 10min sessions
-                "review_items_count": review_count
-            })
-            items_dict.append(item_dict)
-        
-        # Manual pagination
         page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        per_page = request.args.get('per_page', 10, type=int)
         
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        pagination = StudySession.query.filter_by(group_id=group_id).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+        
+        sessions = []
+        for session in pagination.items:
+            activity = StudyActivity.query.get(session.study_activity_id)
+            reviews = WordReviewItem.query.filter_by(study_session_id=session.id).all()
+            total_words = len(reviews)
+            correct_words = len([r for r in reviews if r.is_correct])
+            
+            sessions.append({
+                'id': session.id,
+                'created_at': session.created_at.isoformat(),
+                'activity_name': activity.name if activity else None,
+                'stats': {
+                    'total_words': total_words,
+                    'correct_words': correct_words,
+                    'accuracy': round((correct_words / total_words * 100) if total_words > 0 else 0, 1)
+                }
+            })
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'sessions': sessions,
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -379,48 +364,40 @@ def study_sessions():
             return jsonify({"error": "Database error", "message": str(e)}), 500
     else:
         try:
-            query = StudySession.query.order_by(desc(StudySession.created_at))
-            items = query.all()
-            
-            # Convert SQLAlchemy objects to dictionaries and add additional information
-            items_dict = []
-            for item in items:
-                item_dict = {
-                    'id': item.id,
-                    'group_id': item.group_id,
-                    'study_activity_id': item.study_activity_id,
-                    'created_at': item.created_at.isoformat()
-                }
-                activity = StudyActivity.query.get(item.study_activity_id)
-                group = Group.query.get(item.group_id)
-                review_count = WordReviewItem.query.filter_by(study_session_id=item.id).count()
-                
-                item_dict.update({
-                    "activity_name": activity.name if activity else None,
-                    "group_name": group.name if group else None,
-                    "start_time": item_dict["created_at"],
-                    "end_time": (item.created_at + timedelta(minutes=10)).isoformat(),  # Assuming 10min sessions
-                    "review_items_count": review_count
-                })
-                items_dict.append(item_dict)
-            
-            # Manual pagination
             page = request.args.get('page', 1, type=int)
-            items_per_page = 100
-            start = (page - 1) * items_per_page
-            end = start + items_per_page
+            per_page = request.args.get('per_page', 10, type=int)
             
-            total_items = len(items_dict)
-            total_pages = (total_items + items_per_page - 1) // items_per_page
+            pagination = StudySession.query.paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False
+            )
+            
+            sessions = []
+            for session in pagination.items:
+                activity = StudyActivity.query.get(session.study_activity_id)
+                group = Group.query.get(session.group_id)
+                reviews = WordReviewItem.query.filter_by(study_session_id=session.id).all()
+                total_words = len(reviews)
+                correct_words = len([r for r in reviews if r.is_correct])
+                
+                sessions.append({
+                    'id': session.id,
+                    'created_at': session.created_at.isoformat(),
+                    'activity_name': activity.name if activity else None,
+                    'group_name': group.name if group else None,
+                    'stats': {
+                        'total_words': total_words,
+                        'correct_words': correct_words,
+                        'accuracy': round((correct_words / total_words * 100) if total_words > 0 else 0, 1)
+                    }
+                })
             
             return jsonify({
-                'items': items_dict[start:end],
-                'pagination': {
-                    'current_page': page,
-                    'total_pages': total_pages,
-                    'total_items': total_items,
-                    'items_per_page': items_per_page
-                }
+                'sessions': sessions,
+                'total': pagination.total,
+                'pages': pagination.pages,
+                'current_page': pagination.page
             })
         except SQLAlchemyError as e:
             return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -435,15 +412,20 @@ def get_study_session(session_id):
             
         activity = StudyActivity.query.get(session.study_activity_id)
         group = Group.query.get(session.group_id)
-        review_count = WordReviewItem.query.filter_by(study_session_id=session.id).count()
+        reviews = WordReviewItem.query.filter_by(study_session_id=session.id).all()
+        total_words = len(reviews)
+        correct_words = len([r for r in reviews if r.is_correct])
         
         return jsonify({
             "id": session.id,
+            "created_at": session.created_at.isoformat(),
             "activity_name": activity.name if activity else None,
             "group_name": group.name if group else None,
-            "start_time": session.created_at.isoformat(),
-            "end_time": (session.created_at + timedelta(minutes=10)).isoformat(),  # Assuming 10min sessions
-            "review_items_count": review_count
+            "stats": {
+                "total_words": total_words,
+                "correct_words": correct_words,
+                "accuracy": round((correct_words / total_words * 100) if total_words > 0 else 0, 1)
+            }
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -456,44 +438,22 @@ def get_session_words(session_id):
         if not session:
             return jsonify({"error": "Study session not found"}), 404
             
-        # Get words that have been reviewed in this session
-        query = Word.query.join(WordReviewItem).filter(WordReviewItem.study_session_id == session_id)
-        items = query.all()
+        reviews = WordReviewItem.query.filter_by(study_session_id=session_id).all()
+        words = []
         
-        # Convert SQLAlchemy objects to dictionaries and add stats
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'french': item.french,
-                'english': item.english,
-                'parts': item.parts_dict,
-                'created_at': item.created_at.isoformat()
-            }
-            stats = get_word_stats(item.id)
-            item_dict.update({
-                'correct_count': stats['correct_count'],
-                'wrong_count': stats['wrong_count']
-            })
-            items_dict.append(item_dict)
-        
-        # Manual pagination
-        page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
-        
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        for review in reviews:
+            word = Word.query.get(review.word_id)
+            if word:
+                words.append({
+                    'id': word.id,
+                    'english': word.english,
+                    'french': word.french,
+                    'is_correct': review.is_correct
+                })
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'words': words,
+            'total': len(words)
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -573,6 +533,24 @@ def full_reset():
         return jsonify({"error": "Database error", "message": str(e)}), 500
 
 # Study Activities Endpoints
+@api.route('/api/study_activities', methods=['GET'])
+def get_study_activities():
+    """Get all study activities."""
+    try:
+        activities = StudyActivity.query.all()
+        descriptions = {
+            'Flashcards': 'Practice vocabulary with interactive flashcards. Perfect for memorizing new words and their meanings.',
+            'Multiple Choice': 'Test your knowledge with multiple choice questions. Great for reviewing vocabulary and grammar.',
+            'Writing Practice': 'Improve your writing skills by practicing sentence construction and vocabulary usage.'
+        }
+        return jsonify([{
+            'id': activity.id,
+            'name': activity.name,
+            'description': descriptions.get(activity.name, activity.description)
+        } for activity in activities])
+    except SQLAlchemyError as e:
+        return jsonify({"error": "Database error", "message": str(e)}), 500
+
 @api.route('/api/study_activities/<int:activity_id>')
 def get_study_activity(activity_id):
     """Get a specific study activity."""
@@ -581,11 +559,16 @@ def get_study_activity(activity_id):
         if not activity:
             return jsonify({"error": "Study activity not found"}), 404
             
+        descriptions = {
+            'Flashcards': 'Practice vocabulary with interactive flashcards. Perfect for memorizing new words and their meanings.',
+            'Multiple Choice': 'Test your knowledge with multiple choice questions. Great for reviewing vocabulary and grammar.',
+            'Writing Practice': 'Improve your writing skills by practicing sentence construction and vocabulary usage.'
+        }
+        
         return jsonify({
             "id": activity.id,
             "name": activity.name,
-            "thumbnail_url": "https://example.com/thumbnail.jpg",  # Placeholder
-            "description": "Practice your vocabulary with flashcards"  # Placeholder
+            "description": descriptions.get(activity.name, activity.description)
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -598,47 +581,39 @@ def get_activity_study_sessions(activity_id):
         if not activity:
             return jsonify({"error": "Study activity not found"}), 404
             
-        query = StudySession.query.filter_by(study_activity_id=activity_id)
-        items = query.all()
-        
-        # Convert SQLAlchemy objects to dictionaries and add additional information
-        items_dict = []
-        for item in items:
-            item_dict = {
-                'id': item.id,
-                'group_id': item.group_id,
-                'study_activity_id': item.study_activity_id,
-                'created_at': item.created_at.isoformat()
-            }
-            group = Group.query.get(item.group_id)
-            review_count = WordReviewItem.query.filter_by(study_session_id=item.id).count()
-            
-            item_dict.update({
-                "activity_name": activity.name,
-                "group_name": group.name if group else None,
-                "start_time": item_dict["created_at"],
-                "end_time": (item.created_at + timedelta(minutes=10)).isoformat(),  # Assuming 10min sessions
-                "review_items_count": review_count
-            })
-            items_dict.append(item_dict)
-        
-        # Manual pagination
         page = request.args.get('page', 1, type=int)
-        items_per_page = 100
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        per_page = request.args.get('per_page', 10, type=int)
         
-        total_items = len(items_dict)
-        total_pages = (total_items + items_per_page - 1) // items_per_page
+        pagination = StudySession.query.filter_by(study_activity_id=activity_id).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+        
+        sessions = []
+        for session in pagination.items:
+            group = Group.query.get(session.group_id)
+            reviews = WordReviewItem.query.filter_by(study_session_id=session.id).all()
+            total_words = len(reviews)
+            correct_words = len([r for r in reviews if r.is_correct])
+            
+            sessions.append({
+                'id': session.id,
+                'created_at': session.created_at.isoformat(),
+                'activity_name': activity.name,
+                'group_name': group.name if group else None,
+                'stats': {
+                    'total_words': total_words,
+                    'correct_words': correct_words,
+                    'accuracy': round((correct_words / total_words * 100) if total_words > 0 else 0, 1)
+                }
+            })
         
         return jsonify({
-            'items': items_dict[start:end],
-            'pagination': {
-                'current_page': page,
-                'total_pages': total_pages,
-                'total_items': total_items,
-                'items_per_page': items_per_page
-            }
+            'sessions': sessions,
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
