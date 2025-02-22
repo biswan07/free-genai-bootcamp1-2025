@@ -12,32 +12,62 @@ import {
   Typography,
   CircularProgress,
   Box,
+  Button,
+  Stack,
+  TablePagination,
 } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 const Words = () => {
   const [words, setWords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(0);
+  const [totalWords, setTotalWords] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const fetchWords = async (pageNum = 1) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await wordsAPI.getAll(pageNum);
+      if (pageNum === 1) {
+        setWords(response.data.words || []);
+      } else {
+        setWords(prev => [...prev, ...(response.data.words || [])]);
+      }
+      setTotalWords(response.data.total || 0);
+      
+      // If there are more pages, fetch them
+      if (pageNum < response.data.pages) {
+        await fetchWords(pageNum + 1);
+      }
+    } catch (err) {
+      console.error('Error fetching words:', err);
+      setError('Failed to fetch words. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchWords = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await wordsAPI.getAll();
-        setWords(response.data.words || []);
-      } catch (err) {
-        console.error('Error fetching words:', err);
-        setError('Failed to fetch words. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchWords();
+    fetchWords(1);
   }, []);
 
-  if (loading) {
+  const handleRefresh = () => {
+    fetchWords(1);
+  };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  if (loading && words.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
         <CircularProgress />
@@ -53,11 +83,22 @@ const Words = () => {
     );
   }
 
+  const displayedWords = words.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
     <Container>
-      <Typography variant="h4" gutterBottom>
-        Words
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4">Words</Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefresh}
+          disabled={loading}
+        >
+          Refresh
+        </Button>
+      </Stack>
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -69,7 +110,7 @@ const Words = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {words.map((word) => (
+            {displayedWords.map((word) => (
               <TableRow key={word.id}>
                 <TableCell>{word.english}</TableCell>
                 <TableCell>{word.french}</TableCell>
@@ -79,6 +120,15 @@ const Words = () => {
             ))}
           </TableBody>
         </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={totalWords}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
       </TableContainer>
     </Container>
   );
