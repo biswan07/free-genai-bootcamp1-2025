@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Importer</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@mui/material@5.14.0/umd/material-ui.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                background-color: white;
+            }
+        }
+
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        body {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState } = React;
+        const { 
+            Container, TextField, Button, Stack, Typography, Alert, Paper, MenuItem,
+            ThemeProvider, createTheme, CssBaseline, useMediaQuery, Box
+        } = MaterialUI;
+
+        // Create responsive Material-UI theme
+        const theme = createTheme({
+            palette: {
+                primary: {
+                    main: '#1976d2',
+                },
+                background: {
+                    default: '#f5f5f5'
+                }
+            },
+            shape: {
+                borderRadius: 8
+            },
+            breakpoints: {
+                values: {
+                    xs: 0,
+                    sm: 600,
+                    md: 960,
+                    lg: 1280,
+                    xl: 1920,
+                }
+            }
+        });
+
+        const partOfSpeechOptions = [
+            'noun', 'verb', 'adjective', 'adverb', 'pronoun',
+            'preposition', 'conjunction', 'interjection', 'article'
+        ];
+
+        // API setup
+        const api = axios.create({
+            baseURL: 'http://localhost:5000/api',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+
+        function WordImporter() {
+            const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+            const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+
+            const [formData, setFormData] = useState({
+                french: '',
+                english: '',
+                partOfSpeech: ''
+            });
+
+            const [status, setStatus] = useState({
+                message: '',
+                type: 'info',
+                error: null
+            });
+
+            const handleInputChange = (event) => {
+                const { name, value } = event.target;
+                setFormData(prev => ({
+                    ...prev,
+                    [name]: value
+                }));
+            };
+
+            const handleSubmit = async (event) => {
+                event.preventDefault();
+                
+                const payload = {
+                    french: formData.french,
+                    english: formData.english,
+                    parts: {
+                        part_of_speech: formData.partOfSpeech
+                    }
+                };
+
+                try {
+                    await api.post('/words', payload);
+                    setStatus({
+                        message: 'Word successfully added!',
+                        type: 'success',
+                        error: null
+                    });
+                    setFormData({
+                        french: '',
+                        english: '',
+                        partOfSpeech: ''
+                    });
+                } catch (error) {
+                    setStatus({
+                        message: 'Error adding word',
+                        type: 'error',
+                        error: error.toString()
+                    });
+                }
+            };
+
+            return (
+                <Container 
+                    maxWidth={isMobile ? false : "sm"} 
+                    disableGutters={isMobile}
+                    sx={{ 
+                        mt: isMobile ? 0 : 4,
+                        mb: isMobile ? 0 : 4,
+                        height: isMobile ? '100vh' : 'auto'
+                    }}
+                >
+                    <Paper 
+                        elevation={isMobile ? 0 : 3} 
+                        sx={{ 
+                            p: isMobile ? 2 : 4,
+                            height: isMobile ? '100%' : 'auto',
+                            borderRadius: isMobile ? 0 : 2,
+                            display: 'flex',
+                            flexDirection: 'column'
+                        }}
+                    >
+                        <Typography 
+                            variant={isMobile ? "h5" : "h4"} 
+                            component="h1" 
+                            gutterBottom 
+                            align="center" 
+                            sx={{ mb: 3 }}
+                        >
+                            Word Importer
+                        </Typography>
+                        
+                        <Box component="form" onSubmit={handleSubmit} sx={{ flex: 1 }}>
+                            <Stack spacing={isMobile ? 2 : 3}>
+                                <TextField
+                                    label="French Word"
+                                    name="french"
+                                    value={formData.french}
+                                    onChange={handleInputChange}
+                                    variant="outlined"
+                                    fullWidth
+                                    required
+                                    size={isMobile ? "small" : "medium"}
+                                />
+                                
+                                <TextField
+                                    label="English Equivalent"
+                                    name="english"
+                                    value={formData.english}
+                                    onChange={handleInputChange}
+                                    variant="outlined"
+                                    fullWidth
+                                    required
+                                    size={isMobile ? "small" : "medium"}
+                                />
+                                
+                                <TextField
+                                    select
+                                    label="Part of Speech"
+                                    name="partOfSpeech"
+                                    value={formData.partOfSpeech}
+                                    onChange={handleInputChange}
+                                    variant="outlined"
+                                    fullWidth
+                                    required
+                                    size={isMobile ? "small" : "medium"}
+                                >
+                                    {partOfSpeechOptions.map((option) => (
+                                        <MenuItem key={option} value={option}>
+                                            {option.charAt(0).toUpperCase() + option.slice(1)}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+
+                                <Button 
+                                    type="submit" 
+                                    variant="contained" 
+                                    size={isMobile ? "medium" : "large"}
+                                    sx={{ 
+                                        mt: 2,
+                                        position: isMobile ? 'fixed' : 'static',
+                                        bottom: isMobile ? 16 : 'auto',
+                                        left: isMobile ? 16 : 'auto',
+                                        right: isMobile ? 16 : 'auto',
+                                        width: isMobile ? 'calc(100% - 32px)' : '100%'
+                                    }}
+                                >
+                                    Add Word
+                                </Button>
+                            </Stack>
+                        </Box>
+
+                        {status.message && (
+                            <Alert 
+                                severity={status.type} 
+                                sx={{ 
+                                    mt: 3,
+                                    mb: isMobile ? 8 : 0 // Add bottom margin on mobile to account for fixed button
+                                }}
+                            >
+                                {status.message}
+                                {status.error && (
+                                    <Typography 
+                                        variant="body2" 
+                                        component="pre" 
+                                        sx={{ 
+                                            mt: 1, 
+                                            whiteSpace: 'pre-wrap',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem'
+                                        }}
+                                    >
+                                        {status.error}
+                                    </Typography>
+                                )}
+                            </Alert>
+                        )}
+                    </Paper>
+                </Container>
+            );
+        }
+
+        function App() {
+            return (
+                <ThemeProvider theme={theme}>
+                    <CssBaseline />
+                    <WordImporter />
+                </ThemeProvider>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <React.StrictMode>
+                <App />
+            </React.StrictMode>
+        );
+    </script>
+</body>
+</html>
