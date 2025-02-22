@@ -34,6 +34,7 @@ export const studyActivitiesAPI = {
 export const wordsAPI = {
   getAll: (page = 1) => api.get(`/words?page=${page}`),
   getById: (id) => api.get(`/words/${id}`),
+  create: (data) => api.post('/words', data),
 };
 
 export const studySessionsAPI = {
