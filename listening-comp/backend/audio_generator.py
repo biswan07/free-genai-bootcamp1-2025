@@ -1,51 +1,39 @@
-import boto3
 import json
 import os
 from typing import Dict, List, Tuple
 import tempfile
 import subprocess
 from datetime import datetime
-from google.cloud import texttospeech
-from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesizer
-from azure.cognitiveservices.speech.audio import AudioOutputConfig
+import google.generativeai as genai
+from dotenv import load_dotenv
+import requests
+import base64
+
+# Load environment variables
+load_dotenv()
 
 class AudioGenerator:
     def __init__(self):
-        # AWS clients
-        self.bedrock = boto3.client('bedrock-runtime', region_name="us-east-1")
-        self.polly = boto3.client('polly')
-        self.model_id = "amazon.nova-micro-v1:0"
+        # Configure Gemini
+        self.api_key = os.getenv("GOOGLE_API_KEY")
+        if not self.api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment variables")
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         
-        # Google Cloud TTS client
-        self.google_client = texttospeech.TextToSpeechClient()
-        
-        # Azure TTS client
-        self.azure_speech_config = SpeechConfig(
-            subscription=os.getenv('AZURE_SPEECH_KEY'),
-            region=os.getenv('AZURE_SPEECH_REGION')
-        )
-        
-        # Define Japanese neural voices by gender and service
+        # Define voices by gender and service
         self.voices = {
-            'aws': {
-                'male': ['Takumi'],
-                'female': ['Kazuha'],
-                'announcer': 'Takumi'
-            },
             'google': {
                 'male': ['ja-JP-Standard-C', 'ja-JP-Standard-D'],
                 'female': ['ja-JP-Standard-A', 'ja-JP-Standard-B'],
-                'announcer': 'ja-JP-Standard-D'
-            },
-            'azure': {
-                'male': ['ja-JP-KeitaNeural', 'ja-JP-DaichiNeural'],
-                'female': ['ja-JP-NanamiNeural', 'ja-JP-AoiNeural'],
-                'announcer': 'ja-JP-KeitaNeural'
+                'announcer': 'ja-JP-Standard-D',
+                'french_male': ['fr-FR-Neural2-D', 'fr-FR-Standard-B'],
+                'french_female': ['fr-FR-Neural2-A', 'fr-FR-Standard-A']
             }
         }
         
         # Service rotation for voice variety
-        self.tts_services = ['aws', 'google', 'azure']
+        self.tts_services = ['google']
         self.current_service_index = 0
         
         # Create audio output directory
@@ -55,28 +43,20 @@ class AudioGenerator:
         )
         os.makedirs(self.audio_dir, exist_ok=True)
 
-    def _invoke_bedrock(self, prompt: str) -> str:
-        """Invoke Bedrock with the given prompt using converse API"""
-        messages = [{
-            "role": "user",
-            "content": [{
-                "text": prompt
-            }]
-        }]
-        
+    def _invoke_gemini(self, prompt: str) -> str:
+        """Invoke Gemini with the given prompt"""
         try:
-            response = self.bedrock.converse(
-                modelId=self.model_id,
-                messages=messages,
-                inferenceConfig={
+            response = self.model.generate_content(
+                prompt,
+                generation_config={
                     "temperature": 0.3,
-                    "topP": 0.95,
-                    "maxTokens": 2000
+                    "top_p": 0.95,
+                    "max_output_tokens": 2000
                 }
             )
-            return response['output']['message']['content'][0]['text']
+            return response.text
         except Exception as e:
-            print(f"Error in Bedrock converse: {str(e)}")
+            print(f"Error invoking Gemini: {str(e)}")
             raise e
 
     def validate_conversation_parts(self, parts: List[Tuple[str, str, str]]) -> bool:
@@ -125,7 +105,7 @@ class AudioGenerator:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Ask Nova to parse the conversation and assign speakers and genders
+                # Ask Gemini to parse the conversation and assign speakers and genders
                 prompt = f"""
                 You are a JLPT listening test audio script generator. Format the following question for audio generation.
 
@@ -160,7 +140,7 @@ class AudioGenerator:
                 Make sure to specify gender EXACTLY as shown in the example.
                 """
                 
-                response = self._invoke_bedrock(prompt)
+                response = self._invoke_gemini(prompt)
                 
                 # Parse the response into speaker parts
                 parts = []
@@ -241,24 +221,60 @@ class AudioGenerator:
     def get_voice_for_gender(self, gender: str) -> str:
         """Get an appropriate voice for the given gender"""
         if gender == 'male':
-            return 'Takumi'  # Male voice
+            return self.voices['google']['male'][0]  # Male voice
         else:
-            return 'Kazuha'  # Female voice
+            return self.voices['google']['female'][0]  # Female voice
+
+    def _synthesize_google_tts(self, text: str, voice_name: str, output_file: str) -> bool:
+        """Synthesize speech using Google Cloud Text-to-Speech API with API key"""
+        try:
+            # Use REST API with API key instead of client library
+            url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self.api_key}"
+            
+            # Determine language code based on voice name
+            language_code = "ja-JP"
+            if voice_name.startswith("fr-"):
+                language_code = "fr-FR"
+            
+            payload = {
+                "input": {"text": text},
+                "voice": {
+                    "languageCode": language_code,
+                    "name": voice_name
+                },
+                "audioConfig": {
+                    "audioEncoding": "MP3",
+                    "speakingRate": 0.9,  # Slightly slower for better comprehension
+                }
+            }
+            
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            
+            # The response contains base64-encoded audio content
+            audio_content = response.json().get("audioContent")
+            if not audio_content:
+                print(f"No audio content returned from Google TTS API")
+                return False
+                
+            # Decode and save the audio file
+            with open(output_file, "wb") as out:
+                out.write(base64.b64decode(audio_content))
+                
+            return True
+            
+        except Exception as e:
+            print(f"Error with Google TTS: {str(e)}")
+            return False
 
     def generate_audio_part(self, text: str, voice_name: str) -> str:
-        """Generate audio for a single part using Amazon Polly"""
-        response = self.polly.synthesize_speech(
-            Text=text,
-            OutputFormat='mp3',
-            VoiceId=voice_name,
-            Engine='neural',
-            LanguageCode='ja-JP'
-        )
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
-            temp_file.write(response['AudioStream'].read())
-            return temp_file.name
+        """Generate audio for a single part using Google Cloud Text-to-Speech"""
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as out:
+            temp_file_path = out.name
+            if not self._synthesize_google_tts(text, voice_name, temp_file_path):
+                raise Exception("Failed to generate audio part")
+            print(f"Audio content written to file {temp_file_path}")
+            return temp_file_path
 
     def combine_audio_files(self, audio_files: List[str], output_file: str):
         """Combine multiple audio files using ffmpeg"""
@@ -307,60 +323,80 @@ class AudioGenerator:
             ])
         return output_file
 
-    def generate_audio(self, question: Dict) -> str:
+    def generate_audio(self, text_or_question, voice_name=None):
         """
-        Generate audio for the entire question.
-        Returns the path to the generated audio file.
+        Generate audio for text or a question.
+        
+        Args:
+            text_or_question: Either a string of text or a question dictionary
+            voice_name: Optional voice name to use (for text input)
+            
+        Returns:
+            The path to the generated audio file
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(self.audio_dir, f"question_{timestamp}.mp3")
+        output_file = os.path.join(self.audio_dir, f"audio_{timestamp}.mp3")
         
         try:
-            # Parse conversation into parts
-            parts = self.parse_conversation(question)
+            # If input is a string, generate audio directly
+            if isinstance(text_or_question, str):
+                if not voice_name:
+                    voice_name = self.voices['google']['french_female'][0]  # Default to French female voice
+                
+                # Generate audio for the text
+                if not self._synthesize_google_tts(text_or_question, voice_name, output_file):
+                    raise Exception("Failed to generate audio for text")
+                
+                return output_file
             
-            # Generate audio for each part
-            audio_parts = []
-            current_section = None
-            
-            # Generate silence files for pauses
-            long_pause = self.generate_silence(2000)  # 2 second pause
-            short_pause = self.generate_silence(500)  # 0.5 second pause
-            
-            for speaker, text, gender in parts:
-                # Detect section changes and add appropriate pauses
-                if speaker.lower() == 'announcer':
-                    if '次の会話' in text:  # Introduction
-                        if current_section is not None:
+            # Otherwise, treat as a question dictionary
+            else:
+                question = text_or_question
+                # Parse conversation into parts
+                parts = self.parse_conversation(question)
+                
+                # Generate audio for each part
+                audio_parts = []
+                current_section = None
+                
+                # Generate silence files for pauses
+                long_pause = self.generate_silence(2000)  # 2 second pause
+                short_pause = self.generate_silence(500)  # 0.5 second pause
+                
+                for speaker, text, gender in parts:
+                    # Detect section changes and add appropriate pauses
+                    if speaker.lower() == 'announcer':
+                        if '次の会話' in text:  # Introduction
+                            if current_section is not None:
+                                audio_parts.append(long_pause)
+                            current_section = 'intro'
+                        elif '質問' in text or '選択肢' in text:  # Question or options
                             audio_parts.append(long_pause)
-                        current_section = 'intro'
-                    elif '質問' in text or '選択肢' in text:  # Question or options
+                            current_section = 'question'
+                    elif current_section == 'intro':
                         audio_parts.append(long_pause)
-                        current_section = 'question'
-                elif current_section == 'intro':
-                    audio_parts.append(long_pause)
-                    current_section = 'conversation'
+                        current_section = 'conversation'
+                    
+                    # Get appropriate voice for this speaker
+                    voice = self.get_voice_for_gender(gender)
+                    print(f"Using voice {voice} for {speaker} ({gender})")
+                    
+                    # Generate audio for this part
+                    audio_file = self.generate_audio_part(text, voice)
+                    if not audio_file:
+                        raise Exception("Failed to generate audio part")
+                    audio_parts.append(audio_file)
+                    
+                    # Add short pause between conversation turns
+                    if current_section == 'conversation':
+                        audio_parts.append(short_pause)
                 
-                # Get appropriate voice for this speaker
-                voice = self.get_voice_for_gender(gender)
-                print(f"Using voice {voice} for {speaker} ({gender})")
+                # Combine all parts into final audio
+                if not self.combine_audio_files(audio_parts, output_file):
+                    raise Exception("Failed to combine audio files")
                 
-                # Generate audio for this part
-                audio_file = self.generate_audio_part(text, voice)
-                if not audio_file:
-                    raise Exception("Failed to generate audio part")
-                audio_parts.append(audio_file)
+                return output_file
                 
-                # Add short pause between conversation turns
-                if current_section == 'conversation':
-                    audio_parts.append(short_pause)
-            
-            # Combine all parts into final audio
-            if not self.combine_audio_files(audio_parts, output_file):
-                raise Exception("Failed to combine audio files")
-            
-            return output_file
-            
         except Exception as e:
             # Clean up the output file if it exists
             if os.path.exists(output_file):

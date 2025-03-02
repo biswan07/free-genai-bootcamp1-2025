@@ -1,4 +1,9 @@
 chromadb
 streamlit
-boto3
+google-cloud-aiplatform
+google-cloud-texttospeech
+google-cloud-speech
+google-generativeai
+python-dotenv
 youtube_transcript_api
+requests

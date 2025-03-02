@@ -2,33 +2,37 @@ import chromadb
 from chromadb.utils import embedding_functions
 import json
 import os
-import boto3
 from typing import Dict, List, Optional
+from google.cloud import aiplatform
+from dotenv import load_dotenv
 
-class BedrockEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __init__(self, model_id="amazon.titan-embed-text-v1"):
-        """Initialize Bedrock embedding function"""
-        self.bedrock_client = boto3.client('bedrock-runtime', region_name="us-east-1")
-        self.model_id = model_id
+# Load environment variables
+load_dotenv()
 
+class VertexAIEmbeddingFunction(embedding_functions.EmbeddingFunction):
+    def __init__(self, model_name="textembedding-gecko@latest"):
+        """Initialize Vertex AI embedding function"""
+        # Initialize Vertex AI
+        aiplatform.init(project=os.getenv("GOOGLE_CLOUD_PROJECT", "your-project-id"))
+        self.model_name = model_name
+        
     def __call__(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a list of texts using Bedrock"""
+        """Generate embeddings for a list of texts using Vertex AI"""
         embeddings = []
-        for text in texts:
-            try:
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=json.dumps({
-                        "inputText": text
-                    })
-                )
-                response_body = json.loads(response['body'].read())
-                embedding = response_body['embedding']
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Error generating embedding: {str(e)}")
-                # Return a zero vector as fallback
-                embeddings.append([0.0] * 1536)  # Titan model uses 1536 dimensions
+        
+        # Initialize the model
+        model = aiplatform.TextEmbeddingModel.from_pretrained(self.model_name)
+        
+        try:
+            # Get embeddings for all texts at once (more efficient)
+            embeddings_batch = model.get_embeddings(texts)
+            embeddings = [emb.values for emb in embeddings_batch]
+        except Exception as e:
+            print(f"Error generating embeddings: {str(e)}")
+            # Return zero vectors as fallback
+            for _ in texts:
+                embeddings.append([0.0] * 768)  # Gecko model uses 768 dimensions
+                
         return embeddings
 
 class QuestionVectorStore:
@@ -39,8 +43,8 @@ class QuestionVectorStore:
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=persist_directory)
         
-        # Use Bedrock's Titan embedding model
-        self.embedding_fn = BedrockEmbeddingFunction()
+        # Use Vertex AI embedding model
+        self.embedding_fn = VertexAIEmbeddingFunction()
         
         # Create or get collections for each section type
         self.collections = {

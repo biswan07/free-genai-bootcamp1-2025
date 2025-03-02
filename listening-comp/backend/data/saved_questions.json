@@ -1,0 +1,26 @@
+{
+  "Dialogue-Practice_Travel_2025-03-02_11:50:15": {
+    "question": {
+      "conversation": "Personne 1: Salut Marie! Tu as des projets de voyage cet été?\nPersonne 2: Salut Pierre! Oui, je pense aller en Italie. J'ai toujours voulu visiter Rome et Florence.\nPersonne 1: Ah, l'Italie! C'est fantastique! Tu y vas seule ou avec des amis?\nPersonne 2: J'y vais avec ma sœur. On a réservé des billets d'avion il y a deux mois.\nPersonne 1: Super! Vous allez vous amuser. N'oublie pas de goûter les pâtes carbonara à Rome!",
+      "question": "Avec qui Marie va-t-elle voyager en Italie?",
+      "options": "a) Avec Pierre.\nb) Seule.\nc) Avec sa sœur.\nd) Avec des amis.",
+      "correct_answer": "c"
+    },
+    "practice_type": "Dialogue Practice",
+    "topic": "Travel",
+    "created_at": "2025-03-02 11:50:15",
+    "audio_file": null
+  },
+  "Dialogue-Practice_Shopping_2025-03-02_11:50:42": {
+    "question": {
+      "conversation": "Person 1: Bonjour Marie, ça va? Tu fais quoi ici au centre commercial?\nPerson 2: Salut Pierre! Ça va bien, merci. Je cherche une nouvelle veste pour l'automne. Et toi?\nPerson 1: Moi, je dois acheter un cadeau pour l'anniversaire de ma soeur. C'est difficile de trouver quelque chose d'original!\nPerson 2: Je comprends. As-tu déjà regardé dans cette boutique? Ils ont des choses assez uniques.\nPerson 1: Non, pas encore. Merci pour le conseil! Je vais jeter un coup d'oeil.\nPerson 2: De rien! Bonne chance avec ta recherche.",
+      "question": "Pourquoi Marie est-elle au centre commercial ?",
+      "options": "a) Elle cherche un cadeau pour Pierre.\nb) Elle veut acheter un cadeau pour sa soeur.\nc) Elle cherche une nouvelle veste pour l'automne.\nd) Elle accompagne Pierre.",
+      "correct_answer": "c"
+    },
+    "practice_type": "Dialogue Practice",
+    "topic": "Shopping",
+    "created_at": "2025-03-02 11:50:42",
+    "audio_file": null
+  }
+}

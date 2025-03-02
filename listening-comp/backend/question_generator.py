@@ -1,34 +1,35 @@
-import boto3
 import json
-from typing import Dict, List, Optional
+import os
+from typing import Dict, List, Optional, Any
 from backend.vector_store import QuestionVectorStore
+import google.generativeai as genai
+from dotenv import load_dotenv
+from backend.structured_data import TranscriptStructurer
+
+# Load environment variables from .env file
+load_dotenv()
 
 class QuestionGenerator:
     def __init__(self):
-        """Initialize Bedrock client and vector store"""
-        self.bedrock_client = boto3.client('bedrock-runtime', region_name="us-east-1")
+        """Initialize vector store and Gemini model"""
         self.vector_store = QuestionVectorStore()
-        self.model_id = "amazon.nova-lite-v1:0"
+        self.transcript_structurer = TranscriptStructurer()
+        
+        # Initialize Gemini 2.0 Flash with API key from .env
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in the .env file.")
+        
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
 
-    def _invoke_bedrock(self, prompt: str) -> Optional[str]:
-        """Invoke Bedrock with the given prompt"""
+    def _invoke_gemini(self, prompt: str) -> Optional[str]:
+        """Invoke Gemini with the given prompt"""
         try:
-            messages = [{
-                "role": "user",
-                "content": [{
-                    "text": prompt
-                }]
-            }]
-            
-            response = self.bedrock_client.converse(
-                modelId=self.model_id,
-                messages=messages,
-                inferenceConfig={"temperature": 0.7}
-            )
-            
-            return response['output']['message']['content'][0]['text']
+            response = self.model.generate_content(prompt)
+            return response.text
         except Exception as e:
-            print(f"Error invoking Bedrock: {str(e)}")
+            print(f"Error invoking Gemini: {e}")
             return None
 
     def generate_similar_question(self, section_num: int, topic: str) -> Dict:
@@ -40,149 +41,95 @@ class QuestionGenerator:
             return None
         
         # Create context from similar questions
-        context = "Here are some example JLPT listening questions:\n\n"
+        context = "Here are some example JLPT listening questions:\\n\\n"
         for idx, q in enumerate(similar_questions, 1):
             if section_num == 2:
-                context += f"Example {idx}:\n"
-                context += f"Introduction: {q.get('Introduction', '')}\n"
-                context += f"Conversation: {q.get('Conversation', '')}\n"
-                context += f"Question: {q.get('Question', '')}\n"
+                context += f"Example {idx}:\\n"
+                context += f"Introduction: {q.get('Introduction', '')}\\n"
+                context += f"Conversation: {q.get('Conversation', '')}\\n"
+                context += f"Question: {q.get('Question', '')}\\n"
                 if 'Options' in q:
-                    context += "Options:\n"
-                    for i, opt in enumerate(q['Options'], 1):
-                        context += f"{i}. {opt}\n"
-            else:  # section 3
-                context += f"Example {idx}:\n"
-                context += f"Situation: {q.get('Situation', '')}\n"
-                context += f"Question: {q.get('Question', '')}\n"
-                if 'Options' in q:
-                    context += "Options:\n"
-                    for i, opt in enumerate(q['Options'], 1):
-                        context += f"{i}. {opt}\n"
-            context += "\n"
-
-        # Create prompt for generating new question
-        prompt = f"""Based on the following example JLPT listening questions, create a new question about {topic}.
-        The question should follow the same format but be different from the examples.
-        Make sure the question tests listening comprehension and has a clear correct answer.
+                    context += "Options:\\n"
+                    for i, option in enumerate(q['Options'], 1):
+                        context += f"{i}. {option}\\n"
+            elif section_num == 3:
+                context += f"Example {idx}:\\n"
+                context += f"Situation: {q.get('Situation', '')}\\n"
+                context += f"Question: {q.get('Question', '')}\\n"
         
-        {context}
+        # Generate prompt for Gemini
+        prompt = f"Generate a new JLPT listening question similar to these examples:\\n\\n{context}\\n\\nThe new question should also be about the topic: {topic}."
         
-        Generate a new question following the exact same format as above. Include all components (Introduction/Situation, 
-        Conversation/Question, and Options). Make sure the question is challenging but fair, and the options are plausible 
-        but with only one clearly correct answer. Return ONLY the question without any additional text.
+        # Invoke Gemini to generate the question
+        new_question_text = self._invoke_gemini(prompt)
         
-        New Question:
-        """
-
-        # Generate new question
-        response = self._invoke_bedrock(prompt)
-        if not response:
+        # Parse the generated question text
+        if new_question_text:
+            try:
+                new_question = json.loads(new_question_text)
+                return new_question
+            except json.JSONDecodeError:
+                print(f"Error decoding JSON: {new_question_text}")
+                return None
+        else:
             return None
-
-        # Parse the generated question
-        try:
-            lines = response.strip().split('\n')
-            question = {}
-            current_key = None
-            current_value = []
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                if line.startswith("Introduction:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Introduction'
-                    current_value = [line.replace("Introduction:", "").strip()]
-                elif line.startswith("Conversation:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Conversation'
-                    current_value = [line.replace("Conversation:", "").strip()]
-                elif line.startswith("Situation:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Situation'
-                    current_value = [line.replace("Situation:", "").strip()]
-                elif line.startswith("Question:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Question'
-                    current_value = [line.replace("Question:", "").strip()]
-                elif line.startswith("Options:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Options'
-                    current_value = []
-                elif line[0].isdigit() and line[1] == "." and current_key == 'Options':
-                    current_value.append(line[2:].strip())
-                elif current_key:
-                    current_value.append(line)
-            
-            if current_key:
-                if current_key == 'Options':
-                    question[current_key] = current_value
-                else:
-                    question[current_key] = ' '.join(current_value)
-            
-            # Ensure we have exactly 4 options
-            if 'Options' not in question or len(question.get('Options', [])) != 4:
-                # Use default options if we don't have exactly 4
-                question['Options'] = [
-                    "ピザを食べる",
-                    "ハンバーガーを食べる",
-                    "サラダを食べる",
-                    "パスタを食べる"
-                ]
-            
-            return question
-        except Exception as e:
-            print(f"Error parsing generated question: {str(e)}")
-            return None
+    def generate_french_exercise(self, topic: str) -> Dict[str, Any]:
+        """Generate a French conversation and question based on the given topic"""
+        return self.transcript_structurer.generate_french_exercise(topic)
 
     def get_feedback(self, question: Dict, selected_answer: int) -> Dict:
-        """Generate feedback for the selected answer"""
-        if not question or 'Options' not in question:
-            return None
-
-        # Create prompt for generating feedback
-        prompt = f"""Given this JLPT listening question and the selected answer, provide feedback explaining if it's correct 
-        and why. Keep the explanation clear and concise.
-        
         """
-        if 'Introduction' in question:
-            prompt += f"Introduction: {question['Introduction']}\n"
-            prompt += f"Conversation: {question['Conversation']}\n"
+        Generate feedback for the user's answer using Gemini
+        
+        Args:
+            question: The question dictionary
+            selected_answer: The index of the selected answer (1-based)
+            
+        Returns:
+            A dictionary containing feedback information:
+            {
+                'correct': bool,
+                'correct_answer': int,
+                'explanation': str
+            }
+        """
+        # Determine the correct answer (for demo purposes, we'll use Gemini to determine this)
+        prompt = f"""
+        Analyze this JLPT listening question and determine the correct answer.
+        
+        Question:
+        {json.dumps(question, ensure_ascii=False, indent=2)}
+        
+        The user selected answer #{selected_answer}.
+        
+        Provide your response in the following JSON format:
+        {{
+            "correct": true/false,
+            "correct_answer": [number between 1-4],
+            "explanation": "Detailed explanation in English of why the answer is correct/incorrect"
+        }}
+        
+        Make sure your response is valid JSON.
+        """
+        
+        feedback_text = self._invoke_gemini(prompt)
+        
+        if feedback_text:
+            try:
+                feedback = json.loads(feedback_text)
+                return feedback
+            except json.JSONDecodeError:
+                print(f"Error decoding feedback JSON: {feedback_text}")
+                # Return a default feedback if parsing fails
+                return {
+                    "correct": False,
+                    "correct_answer": 1,
+                    "explanation": "Sorry, I couldn't analyze your answer properly. Please try again."
+                }
         else:
-            prompt += f"Situation: {question['Situation']}\n"
-        
-        prompt += f"Question: {question['Question']}\n"
-        prompt += "Options:\n"
-        for i, opt in enumerate(question['Options'], 1):
-            prompt += f"{i}. {opt}\n"
-        
-        prompt += f"\nSelected Answer: {selected_answer}\n"
-        prompt += "\nProvide feedback in JSON format with these fields:\n"
-        prompt += "- correct: true/false\n"
-        prompt += "- explanation: brief explanation of why the answer is correct/incorrect\n"
-        prompt += "- correct_answer: the number of the correct option (1-4)\n"
-
-        # Get feedback
-        response = self._invoke_bedrock(prompt)
-        if not response:
-            return None
-
-        try:
-            # Parse the JSON response
-            feedback = json.loads(response.strip())
-            return feedback
-        except:
-            # If JSON parsing fails, return a basic response with a default correct answer
             return {
                 "correct": False,
-                "explanation": "Unable to generate detailed feedback. Please try again.",
-                "correct_answer": 1  # Default to first option
+                "correct_answer": 1,
+                "explanation": "Sorry, I couldn't generate feedback for your answer. Please try again."
             }
