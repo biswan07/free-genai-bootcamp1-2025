@@ -34,18 +34,37 @@ export const studyActivitiesAPI = {
 export const wordsAPI = {
   getAll: (page = 1) => api.get(`/words?page=${page}`),
   getById: (id) => api.get(`/words/${id}`),
+  getByGroup: (groupId) => api.get(`/words?group_id=${groupId}`),
   create: (data) => api.post('/words', data),
+  update: (id, data) => api.put(`/words/${id}`, data),
+};
+
+export const groupsAPI = {
+  getAll: () => api.get('/groups'),
+  getById: (id) => api.get(`/groups/${id}`),
+  create: (data) => api.post('/groups', data),
 };
 
 export const studySessionsAPI = {
-  getById: (id) => api.get(`/study_sessions/${id}`),
+  getAll: () => api.get('/study-sessions'),
+  getById: (id) => api.get(`/study-sessions/${id}`),
+  create: (data) => api.post('/study-sessions', data),
+  recordWordReview: (data) => api.post('/word-reviews', data),
+};
+
+export const quizAPI = {
+  generate: (data) => api.post('/quiz/generate', data),
+  submitAnswer: (data) => api.post('/quiz/answer', data),
+  getSummary: (sessionId) => api.get(`/quiz/summary/${sessionId}`),
 };
 
 const apiExports = {
   dashboardAPI,
   studyActivitiesAPI,
   wordsAPI,
+  groupsAPI,
   studySessionsAPI,
+  quizAPI,
 };
 
 export default apiExports;

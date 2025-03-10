@@ -25,6 +25,12 @@ import Words from './pages/Words';
 import WordShow from './pages/WordShow';
 import StudySessionShow from './pages/StudySessionShow';
 
+// Components
+import FlashcardSession from './components/FlashcardSession';
+import FlashcardSetup from './components/FlashcardSetup';
+import QuizSetup from './components/QuizSetup';
+import Quiz from './components/Quiz';
+
 const drawerWidth = 240;
 
 function App() {
@@ -82,6 +88,13 @@ function App() {
               <Route path="/study-activities" element={<StudyActivities />} />
               <Route path="/study-activities/:id" element={<StudyActivityShow />} />
               <Route path="/study-activities/:id/launch" element={<StudyActivityLaunch />} />
+              <Route path="/study/:activityId/group/:groupId" element={<FlashcardSession />} />
+              <Route path="/study/:activityId/flashcards" element={<FlashcardSetup />} />
+              <Route path="/study/:activityId/flashcards/:wordCount" element={<FlashcardSession />} />
+              <Route path="/study/:activityId/flashcards/practice/:wordCount" element={<FlashcardSession />} />
+              <Route path="/study/flashcards/:groupId/:activityId" element={<FlashcardSession />} />
+              <Route path="/study/:activityId/quiz-setup" element={<QuizSetup />} />
+              <Route path="/study/:activityId/quiz/:sessionId" element={<Quiz />} />
               <Route path="/words" element={<Words />} />
               <Route path="/words/:id" element={<WordShow />} />
               <Route path="/study-sessions/:id" element={<StudySessionShow />} />

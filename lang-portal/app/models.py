@@ -55,6 +55,7 @@ class StudySession(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
     study_activity_id = db.Column(db.Integer, db.ForeignKey('study_activities.id'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    session_data = db.Column(db.JSON, nullable=True)  # Added session_data field to store quiz state
     
     # Relationships
     review_items = db.relationship('WordReviewItem', back_populates='study_session', cascade='all, delete-orphan')

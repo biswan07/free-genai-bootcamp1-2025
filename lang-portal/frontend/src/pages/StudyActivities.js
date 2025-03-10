@@ -83,7 +83,7 @@ const StudyActivities = () => {
                 <Box display="flex" justifyContent="space-between" mt={2}>
                   <Button
                     component={Link}
-                    to={`/study/${activity.id}`}
+                    to={`/study-activities/${activity.id}/launch`}
                     variant="contained"
                     color="primary"
                   >
@@ -91,7 +91,7 @@ const StudyActivities = () => {
                   </Button>
                   <Button
                     component={Link}
-                    to={`/study/${activity.id}/details`}
+                    to={`/study-activities/${activity.id}/details`}
                     variant="outlined"
                     color="primary"
                   >

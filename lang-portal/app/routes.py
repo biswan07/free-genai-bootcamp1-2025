@@ -4,8 +4,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func, desc
 from datetime import datetime, timedelta
 from .utils import get_word_stats, get_study_streak_days, get_quick_stats
+from .multiple_choice import generate_quiz, check_answer, get_quiz_summary
+import json
 
 api = Blueprint('api', __name__)
+
+# Global dictionary to store quiz states
+quiz_states = {}
 
 # Error Handlers
 @api.errorhandler(400)
@@ -113,8 +118,21 @@ def get_words():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
+        group_id = request.args.get('group_id', type=int)
         
-        pagination = Word.query.paginate(
+        # Base query
+        query = Word.query
+        
+        # Filter by group if group_id is provided
+        if group_id:
+            group = Group.query.get(group_id)
+            if not group:
+                return jsonify({"error": "Group not found"}), 404
+                
+            query = query.join(Word.groups).filter(Group.id == group_id)
+        
+        # Apply pagination
+        pagination = query.paginate(
             page=page,
             per_page=per_page,
             error_out=False
@@ -134,28 +152,75 @@ def get_words():
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
 
-@api.route('/api/words/<int:word_id>')
-def get_word(word_id):
-    """Get a specific word by ID."""
-    try:
-        word = Word.query.get(word_id)
-        if not word:
-            return jsonify({"error": "Word not found"}), 404
+@api.route('/api/words/<int:word_id>', methods=['GET', 'PUT'])
+def word_operations(word_id):
+    """Get or update a specific word by ID."""
+    if request.method == 'GET':
+        try:
+            word = Word.query.get(word_id)
+            if not word:
+                return jsonify({"error": "Word not found"}), 404
+                
+            stats = get_word_stats(word_id)
+            groups = Group.query.join(Group.words).filter(Word.id == word_id).all()
             
-        stats = get_word_stats(word_id)
-        groups = Group.query.join(Group.words).filter(Word.id == word_id).all()
-        
-        return jsonify({
-            "french": word.french,
-            "english": word.english,
-            "stats": stats,
-            "groups": [{
-                "id": group.id,
-                "name": group.name
-            } for group in groups]
-        })
-    except SQLAlchemyError as e:
-        return jsonify({"error": "Database error", "message": str(e)}), 500
+            return jsonify({
+                "french": word.french,
+                "english": word.english,
+                "stats": stats,
+                "groups": [{
+                    "id": group.id,
+                    "name": group.name
+                } for group in groups]
+            })
+        except SQLAlchemyError as e:
+            return jsonify({"error": "Database error", "message": str(e)}), 500
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            word = Word.query.get(word_id)
+            
+            if not word:
+                return jsonify({"error": "Word not found"}), 404
+                
+            # Update basic word properties if provided
+            if 'french' in data:
+                word.french = data['french']
+            if 'english' in data:
+                word.english = data['english']
+            if 'parts' in data:
+                word.parts = data['parts']
+                
+            # Update group associations if group_ids is provided
+            if 'group_ids' in data and isinstance(data['group_ids'], list):
+                # Clear existing group associations
+                word.groups = []
+                
+                # Add the word to specified groups
+                for group_id in data['group_ids']:
+                    group = Group.query.get(group_id)
+                    if group:
+                        word.groups.append(group)
+            
+            db.session.commit()
+            
+            # Get the updated groups the word belongs to
+            groups = Group.query.join(Group.words).filter(Word.id == word.id).all()
+            
+            return jsonify({
+                "id": word.id,
+                "french": word.french,
+                "english": word.english,
+                "parts": word.parts,
+                "updated_at": word.created_at.isoformat(),
+                "groups": [{
+                    "id": group.id,
+                    "name": group.name
+                } for group in groups]
+            })
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            return jsonify({"error": "Database error", "message": str(e)}), 500
 
 @api.route('/api/words', methods=['POST'])
 def create_word():
@@ -172,15 +237,29 @@ def create_word():
             parts=data.get('parts', {})
         )
         
+        # Add the word to specified groups if group_ids is provided
+        if 'group_ids' in data and isinstance(data['group_ids'], list):
+            for group_id in data['group_ids']:
+                group = Group.query.get(group_id)
+                if group:
+                    word.groups.append(group)
+        
         db.session.add(word)
         db.session.commit()
+        
+        # Get the groups the word was added to
+        groups = Group.query.join(Group.words).filter(Word.id == word.id).all()
         
         return jsonify({
             "id": word.id,
             "french": word.french,
             "english": word.english,
             "parts": word.parts,
-            "created_at": word.created_at.isoformat()
+            "created_at": word.created_at.isoformat(),
+            "groups": [{
+                "id": group.id,
+                "name": group.name
+            } for group in groups]
         }), 201
         
     except SQLAlchemyError as e:
@@ -247,7 +326,13 @@ def get_group(group_id):
             "name": group.name,
             "stats": {
                 "total_word_count": len(group.words)
-            }
+            },
+            "words": [{
+                "id": word.id,
+                "english": word.english,
+                "french": word.french,
+                "stats": word.stats
+            } for word in group.words]
         })
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": str(e)}), 500
@@ -496,6 +581,45 @@ def record_word_review(session_id, word_id):
         db.session.rollback()
         return jsonify({"error": "Database error", "message": str(e)}), 500
 
+# Word Review Items Endpoint
+@api.route('/api/word_review_items', methods=['POST'])
+def create_word_review():
+    """Create a new word review item."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'word_id' not in data or 'study_session_id' not in data or 'correct' not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        session = StudySession.query.get(data['study_session_id'])
+        word = Word.query.get(data['word_id'])
+        
+        if not session:
+            return jsonify({"error": "Study session not found"}), 404
+        if not word:
+            return jsonify({"error": "Word not found"}), 404
+            
+        review = WordReviewItem(
+            study_session_id=data['study_session_id'],
+            word_id=data['word_id'],
+            is_correct=data['correct']
+        )
+        
+        db.session.add(review)
+        db.session.commit()
+        
+        return jsonify({
+            "id": review.id,
+            "study_session_id": review.study_session_id,
+            "word_id": review.word_id,
+            "is_correct": review.is_correct,
+            "created_at": review.created_at.isoformat()
+        }), 201
+        
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": "Database error", "message": str(e)}), 500
+
 # System Reset Endpoints
 @api.route('/api/reset_history', methods=['POST'])
 def reset_history():
@@ -640,3 +764,150 @@ def create_study_activity():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": "Database error", "message": str(e)}), 500
+
+# Multiple Choice Quiz Endpoints
+@api.route('/api/quiz/generate', methods=['POST'])
+def generate_quiz_endpoint():
+    """Generate a multiple-choice quiz based on words."""
+    try:
+        data = request.get_json()
+        
+        # Get words to use for the quiz
+        words = []
+        if 'group_id' in data:
+            # Get words from a specific group
+            group = Group.query.get(data['group_id'])
+            if not group:
+                return jsonify({"error": "Group not found"}), 404
+            
+            words = [
+                {
+                    "id": word.id,
+                    "french": word.french,
+                    "english": word.english,
+                    "parts": word.parts
+                } for word in group.words
+            ]
+        elif 'word_ids' in data and isinstance(data['word_ids'], list):
+            # Get specific words by IDs
+            word_objects = Word.query.filter(Word.id.in_(data['word_ids'])).all()
+            words = [
+                {
+                    "id": word.id,
+                    "french": word.french,
+                    "english": word.english,
+                    "parts": word.parts
+                } for word in word_objects
+            ]
+        else:
+            # Get all words
+            word_objects = Word.query.all()
+            words = [
+                {
+                    "id": word.id,
+                    "french": word.french,
+                    "english": word.english,
+                    "parts": word.parts
+                } for word in word_objects
+            ]
+        
+        if not words:
+            return jsonify({"error": "No words available for quiz generation"}), 400
+        
+        # Generate the quiz
+        question_count = data.get('question_count', 10)
+        quiz_state = generate_quiz(words, question_count)
+        
+        # Create a new study session for the quiz
+        study_session = StudySession(
+            study_activity_id=data.get('study_activity_id', 1),
+            group_id=data.get('group_id', 1)
+        )
+        db.session.add(study_session)
+        db.session.commit()
+        
+        # Store the quiz state in the global dictionary
+        quiz_id = str(study_session.id)
+        quiz_states[quiz_id] = quiz_state
+        
+        return jsonify({
+            "session_id": study_session.id,
+            "questions": quiz_state["questions"],
+            "total_questions": len(quiz_state["questions"])
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error generating quiz: {str(e)}")
+        return jsonify({"error": "Failed to generate quiz", "message": str(e)}), 500
+
+@api.route('/api/quiz/answer', methods=['POST'])
+def submit_quiz_answer():
+    """Submit an answer for a quiz question."""
+    try:
+        data = request.get_json()
+        
+        session_id = data.get('session_id')
+        question_index = data.get('question_index')
+        selected_answer = data.get('selected_answer')
+        
+        if not all([session_id, question_index is not None, selected_answer]):
+            return jsonify({"error": "Missing required fields"}), 400
+        
+        # Get the study session
+        study_session = StudySession.query.get(session_id)
+        if not study_session:
+            return jsonify({"error": "Study session not found"}), 404
+        
+        # Get the quiz state from the global dictionary
+        quiz_id = str(session_id)
+        quiz_state = quiz_states.get(quiz_id)
+        
+        if not quiz_state:
+            return jsonify({"error": "Quiz state not found"}), 404
+        
+        # Check the answer
+        updated_quiz_state = check_answer(quiz_state, question_index, selected_answer)
+        
+        # Update the quiz state in the global dictionary
+        quiz_states[quiz_id] = updated_quiz_state
+        
+        # Get the current question
+        question = updated_quiz_state["questions"][question_index]
+        
+        return jsonify({
+            "is_correct": question.get("user_answer") == question.get("correct_answer"),
+            "correct_answer": question.get("correct_answer"),
+            "explanation": question.get("explanation", ""),
+            "correct_count": updated_quiz_state.get("correct_count", 0),
+            "incorrect_count": updated_quiz_state.get("incorrect_count", 0)
+        })
+        
+    except Exception as e:
+        print(f"Error submitting answer: {str(e)}")
+        return jsonify({"error": "Failed to submit answer", "message": str(e)}), 500
+
+@api.route('/api/quiz/summary/<int:session_id>', methods=['GET'])
+def get_quiz_summary_endpoint(session_id):
+    """Get a summary of the quiz results."""
+    try:
+        # Get the study session
+        study_session = StudySession.query.get(session_id)
+        if not study_session:
+            return jsonify({"error": "Study session not found"}), 404
+        
+        # Get the quiz state from the global dictionary
+        quiz_id = str(session_id)
+        quiz_state = quiz_states.get(quiz_id)
+        
+        if not quiz_state:
+            return jsonify({"error": "Quiz state not found"}), 404
+        
+        # Get the quiz summary
+        summary = get_quiz_summary(quiz_state)
+        
+        return jsonify(summary)
+        
+    except Exception as e:
+        print(f"Error getting quiz summary: {str(e)}")
+        return jsonify({"error": "Failed to get quiz summary", "message": str(e)}), 500
