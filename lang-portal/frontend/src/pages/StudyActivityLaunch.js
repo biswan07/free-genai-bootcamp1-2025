@@ -34,7 +34,9 @@ function StudyActivityLaunch() {
         
         // Fetch available word groups
         const groupsResponse = await groupsAPI.getAll();
-        // Fix: Extract the groups array from the response data
+        console.log('Groups response:', groupsResponse.data);
+        
+        // Updated to match the actual API response structure
         setGroups(groupsResponse.data.groups || []);
         
         setLoading(false);
@@ -61,8 +63,10 @@ function StudyActivityLaunch() {
     // Navigate based on activity type
     if (activity.name === 'Flashcards') {
       navigate(`/study/${id}/flashcards`);
-    } else if (activity.name === 'Multiple Choice Quiz') {
-      navigate(`/study/${id}/quiz-setup`);
+    } else if (activity.name === 'Multiple Choice') {
+      navigate(`/study/${id}/quiz-setup?groupId=${selectedGroup}`);
+    } else if (activity.name === 'Writing Practice') {
+      navigate(`/study/${id}/writing-setup?activityId=${id}&groupId=${selectedGroup}`);
     } else {
       // For other activities (to be implemented later)
       setError('This activity type is not yet implemented');
@@ -111,11 +115,17 @@ function StudyActivityLaunch() {
               label="Select Word Group"
               onChange={handleGroupChange}
             >
-              {groups.map((group) => (
-                <MenuItem key={group.id} value={group.id}>
-                  {group.name}
+              {groups.length > 0 ? (
+                groups.map((group) => (
+                  <MenuItem key={group.id} value={group.id}>
+                    {group.name}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled value="">
+                  No word groups available
                 </MenuItem>
-              ))}
+              )}
             </Select>
           </FormControl>
         </Box>

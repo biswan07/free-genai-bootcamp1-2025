@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func, desc
 from datetime import datetime, timedelta
 from .utils import get_word_stats, get_study_streak_days, get_quick_stats
+from app.writing_practice import generate_writing_prompts, evaluate_writing
 
 api = Blueprint('api', __name__)
 
@@ -640,3 +641,291 @@ def create_study_activity():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": "Database error", "message": str(e)}), 500
+
+# Quiz Endpoints
+@api.route('/api/quiz/generate', methods=['POST'])
+def generate_quiz():
+    """Generate a quiz with multiple choice questions."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'question_count' not in data or 'study_activity_id' not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        question_count = min(int(data['question_count']), 20)  # Limit to 20 questions max
+        study_activity_id = int(data['study_activity_id'])
+        
+        # Check if study activity exists
+        activity = StudyActivity.query.get(study_activity_id)
+        if not activity:
+            return jsonify({"error": "Study activity not found"}), 404
+        
+        # Get words based on group_id if provided, otherwise use all words
+        if 'group_id' in data and data['group_id']:
+            group_id = int(data['group_id'])
+            group = Group.query.get(group_id)
+            if not group:
+                return jsonify({"error": "Group not found"}), 404
+                
+            words = Word.query.join(Word.groups).filter(Group.id == group_id).all()
+        else:
+            words = Word.query.all()
+        
+        if not words:
+            return jsonify({"error": "No words available for quiz"}), 400
+            
+        # Shuffle words and select up to question_count
+        import random
+        selected_words = random.sample(words, min(len(words), question_count))
+        
+        # Create a new study session
+        session = StudySession(
+            study_activity_id=study_activity_id,
+            group_id=data.get('group_id', 1)  # Default to group_id 1 if not provided
+        )
+        db.session.add(session)
+        db.session.commit()
+        
+        # Generate multiple choice questions
+        questions = []
+        for word in selected_words:
+            # Get 3 random incorrect options
+            incorrect_options = [w.english for w in words if w.id != word.id]
+            if len(incorrect_options) < 3:
+                # If not enough words, duplicate some
+                while len(incorrect_options) < 3:
+                    incorrect_options.append(random.choice([w.english for w in words if w.id != word.id]))
+            
+            # Select 3 random incorrect options
+            random.shuffle(incorrect_options)
+            options = incorrect_options[:3] + [word.english]
+            random.shuffle(options)
+            
+            questions.append({
+                "word_id": word.id,
+                "question": f"What is the English translation of '{word.french}'?",
+                "options": options,
+                "correct_answer": word.english
+            })
+        
+        # Store questions in session for later reference
+        # In a real app, this would be stored in a database
+        import json
+        session.questions = json.dumps(questions)
+        db.session.commit()
+        
+        return jsonify({
+            "session_id": session.id,
+            "question_count": len(questions),
+            "message": "Quiz generated successfully"
+        }), 201
+        
+    except Exception as e:
+        import traceback
+        print(f"Error generating quiz: {str(e)}")
+        print(traceback.format_exc())
+        db.session.rollback()
+        return jsonify({"error": "Failed to generate quiz", "message": str(e)}), 500
+
+@api.route('/api/quiz/answer', methods=['POST'])
+def submit_quiz_answer():
+    """Submit an answer for a quiz question."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'session_id' not in data or 'question_index' not in data or 'selected_answer' not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        session_id = int(data['session_id'])
+        question_index = int(data['question_index'])
+        selected_answer = data['selected_answer']
+        
+        # Get the session
+        session = StudySession.query.get(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+            
+        # Get questions from session
+        import json
+        if not hasattr(session, 'questions') or not session.questions:
+            return jsonify({"error": "No questions found for this session"}), 400
+            
+        questions = json.loads(session.questions)
+        
+        if question_index < 0 or question_index >= len(questions):
+            return jsonify({"error": "Invalid question index"}), 400
+            
+        # Get the question
+        question = questions[question_index]
+        correct_answer = question['correct_answer']
+        is_correct = selected_answer == correct_answer
+        
+        # Update the question with user's answer
+        question['user_answer'] = selected_answer
+        question['is_correct'] = is_correct
+        
+        # Record the word review
+        word = Word.query.get(question['word_id'])
+        if word:
+            review = WordReviewItem(
+                study_session_id=session_id,
+                word_id=word.id,
+                is_correct=is_correct
+            )
+            db.session.add(review)
+        
+        # Update questions in session
+        questions[question_index] = question
+        session.questions = json.dumps(questions)
+        db.session.commit()
+        
+        # Provide feedback
+        explanation = f"The correct translation of '{word.french}' is '{correct_answer}'."
+        
+        return jsonify({
+            "is_correct": is_correct,
+            "correct_answer": correct_answer,
+            "explanation": explanation
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to submit answer", "message": str(e)}), 500
+
+@api.route('/api/quiz/summary/<int:session_id>')
+def get_quiz_summary(session_id):
+    """Get a summary of a quiz session."""
+    try:
+        session = StudySession.query.get(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+            
+        # Get questions from session
+        import json
+        if not hasattr(session, 'questions') or not session.questions:
+            return jsonify({"error": "No questions found for this session"}), 400
+            
+        questions = json.loads(session.questions)
+        
+        # Calculate stats
+        answered_questions = [q for q in questions if 'user_answer' in q]
+        correct_answers = sum(1 for q in answered_questions if q.get('is_correct', False))
+        total_questions = len(questions)
+        accuracy = round((correct_answers / total_questions * 100) if total_questions > 0 else 0)
+        
+        return jsonify({
+            "session_id": session_id,
+            "total_questions": total_questions,
+            "answered_questions": len(answered_questions),
+            "correct_answers": correct_answers,
+            "accuracy": accuracy,
+            "questions": questions
+        })
+        
+    except Exception as e:
+        return jsonify({"error": "Failed to get quiz summary", "message": str(e)}), 500
+
+# Writing Practice Endpoints
+@api.route('/api/writing/prompts', methods=['GET'])
+def get_writing_prompts():
+    """Get a list of writing prompts."""
+    try:
+        count = request.args.get('count', 10, type=int)
+        level = request.args.get('level', 'intermediate')
+        
+        prompts = generate_writing_prompts(count=count, language_level=level)
+        
+        return jsonify({
+            "prompts": prompts,
+            "count": len(prompts)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": "Failed to generate writing prompts", "message": str(e)}), 500
+
+@api.route('/api/writing/submit', methods=['POST'])
+def submit_writing():
+    """Submit a writing assignment for evaluation."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'prompt' not in data or 'text' not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        prompt = data['prompt']
+        text = data['text']
+        level = data.get('level', 'intermediate')
+        study_activity_id = data.get('study_activity_id')
+        
+        # Validate text length
+        word_count = len(text.split())
+        if word_count < 50:
+            return jsonify({"error": "Writing is too short", "message": "Please write at least 50 words"}), 400
+        if word_count > 200:
+            return jsonify({"error": "Writing is too long", "message": "Please write no more than 200 words"}), 400
+        
+        # Evaluate the writing
+        evaluation = evaluate_writing(prompt, text, language_level=level)
+        
+        # Create a new study session if study_activity_id is provided
+        if study_activity_id:
+            try:
+                study_activity_id = int(study_activity_id)
+                
+                # Check if study activity exists
+                activity = StudyActivity.query.get(study_activity_id)
+                if not activity:
+                    return jsonify({"error": "Study activity not found"}), 404
+                
+                # Create a new study session
+                session = StudySession(
+                    study_activity_id=study_activity_id,
+                    group_id=data.get('group_id', 1)  # Default to group_id 1 if not provided
+                )
+                
+                # Store the writing submission and evaluation
+                session_data = {
+                    "prompt": prompt,
+                    "text": text,
+                    "evaluation": evaluation
+                }
+                
+                session.questions = json.dumps(session_data)
+                db.session.add(session)
+                db.session.commit()
+                
+                # Add session_id to the response
+                evaluation["session_id"] = session.id
+                
+            except Exception as e:
+                print(f"Error creating study session: {e}")
+                # Continue with the evaluation even if session creation fails
+        
+        return jsonify(evaluation), 200
+        
+    except Exception as e:
+        return jsonify({"error": "Failed to evaluate writing", "message": str(e)}), 500
+
+@api.route('/api/writing/summary/<int:session_id>', methods=['GET'])
+def get_writing_summary(session_id):
+    """Get a summary of a writing session."""
+    try:
+        session = StudySession.query.get(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+            
+        if not session.questions:
+            return jsonify({"error": "No writing data found for this session"}), 404
+            
+        session_data = json.loads(session.questions)
+        
+        return jsonify({
+            "session_id": session.id,
+            "prompt": session_data.get("prompt", ""),
+            "text": session_data.get("text", ""),
+            "evaluation": session_data.get("evaluation", {}),
+            "created_at": session.created_at.isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": "Failed to get writing summary", "message": str(e)}), 500

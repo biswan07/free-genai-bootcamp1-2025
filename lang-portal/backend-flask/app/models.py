@@ -52,9 +52,10 @@ class StudySession(db.Model):
     __tablename__ = 'study_sessions'
     
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=True)
     study_activity_id = db.Column(db.Integer, db.ForeignKey('study_activities.id'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    questions = db.Column(db.Text, nullable=True)  # To store JSON-serialized quiz questions
     
     # Relationships
     review_items = db.relationship('WordReviewItem', back_populates='study_session', cascade='all, delete-orphan')

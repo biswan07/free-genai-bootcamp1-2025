@@ -10,7 +10,8 @@ def get_words():
     
     pagination = Word.query.paginate(page=page, per_page=per_page)
     
-    items = [{
+    words = [{
+        "id": word.id,
         "french": word.french,
         "english": word.english,
         "correct_count": word.stats["correct_count"],
@@ -18,13 +19,10 @@ def get_words():
     } for word in pagination.items]
     
     return jsonify({
-        "items": items,
-        "pagination": {
-            "current_page": pagination.page,
-            "total_pages": pagination.pages,
-            "total_items": pagination.total,
-            "items_per_page": per_page
-        }
+        "words": words,
+        "current_page": pagination.page,
+        "pages": pagination.pages,
+        "total": pagination.total
     })
 
 @words_bp.route('/<int:id>')

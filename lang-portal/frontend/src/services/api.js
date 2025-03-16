@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'http://localhost:5001/api',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -46,16 +46,24 @@ export const groupsAPI = {
 };
 
 export const studySessionsAPI = {
-  getAll: () => api.get('/study-sessions'),
-  getById: (id) => api.get(`/study-sessions/${id}`),
-  create: (data) => api.post('/study-sessions', data),
-  recordWordReview: (data) => api.post('/word-reviews', data),
+  getAll: () => api.get('/study_sessions'),
+  getById: (id) => api.get(`/study_sessions/${id}`),
+  create: (data) => api.post('/study_sessions', data),
+  recordWordReview: ({ word_id, study_session_id, correct }) => 
+    api.post(`/study_sessions/${study_session_id}/words/${word_id}/review`, { is_correct: correct }),
 };
 
 export const quizAPI = {
   generate: (data) => api.post('/quiz/generate', data),
   submitAnswer: (data) => api.post('/quiz/answer', data),
   getSummary: (sessionId) => api.get(`/quiz/summary/${sessionId}`),
+};
+
+export const writingAPI = {
+  getPrompts: (count = 10, level = 'intermediate') => 
+    api.get(`/writing/prompts?count=${count}&level=${level}`),
+  submitWriting: (data) => api.post('/writing/submit', data),
+  getSummary: (sessionId) => api.get(`/writing/summary/${sessionId}`),
 };
 
 const apiExports = {
@@ -65,6 +73,7 @@ const apiExports = {
   groupsAPI,
   studySessionsAPI,
   quizAPI,
+  writingAPI,
 };
 
 export default apiExports;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -23,6 +23,7 @@ import { wordsAPI, groupsAPI, quizAPI } from '../services/api';
 const QuizSetup = () => {
   const { activityId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,6 +37,10 @@ const QuizSetup = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        
+        // Get groupId from URL query parameters
+        const searchParams = new URLSearchParams(location.search);
+        const groupIdFromUrl = searchParams.get('groupId');
         
         // Fetch all words to get the total count
         const wordsResponse = await wordsAPI.getAll();
@@ -52,6 +57,12 @@ const QuizSetup = () => {
         const groupsResponse = await groupsAPI.getAll();
         setGroups(groupsResponse.data.groups || []);
         
+        // Set selected group from URL query parameter
+        if (groupIdFromUrl) {
+          setSelectedGroup(groupIdFromUrl);
+          setUseAllWords(false);
+        }
+        
         setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -61,7 +72,7 @@ const QuizSetup = () => {
     };
 
     fetchData();
-  }, []);
+  }, [location.search]);
 
   const handleQuestionCountChange = (event, newValue) => {
     setQuestionCount(newValue);
@@ -97,12 +108,21 @@ const QuizSetup = () => {
         quizData.group_id = parseInt(selectedGroup);
       }
       
-      const response = await quizAPI.generate(quizData);
+      console.log('Generating quiz with data:', quizData);
       
-      navigate(`/study/${activityId}/quiz/${response.data.session_id}`);
+      const response = await quizAPI.generate(quizData);
+      console.log('Quiz generation response:', response);
+      
+      if (response.data && response.data.session_id) {
+        navigate(`/study/${activityId}/quiz/${response.data.session_id}`);
+      } else {
+        setError('Failed to generate quiz: Invalid response from server');
+        setLoading(false);
+      }
     } catch (err) {
       console.error('Error starting quiz:', err);
-      setError('Failed to start quiz. Please try again later.');
+      const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
+      setError(`Failed to start quiz: ${errorMessage}`);
       setLoading(false);
     }
   };
@@ -122,7 +142,7 @@ const QuizSetup = () => {
     return (
       <Container>
         <Alert severity="error" sx={{ my: 2 }}>{error}</Alert>
-        <Button variant="contained" onClick={() => navigate('/study')}>
+        <Button variant="outlined" onClick={() => navigate('/study')}>
           Back to Study Activities
         </Button>
       </Container>

@@ -30,6 +30,9 @@ import FlashcardSession from './components/FlashcardSession';
 import FlashcardSetup from './components/FlashcardSetup';
 import QuizSetup from './components/QuizSetup';
 import Quiz from './components/Quiz';
+import QuizSummary from './components/QuizSummary';
+import WritingSetup from './components/WritingSetup';
+import Writing from './components/Writing';
 
 const drawerWidth = 240;
 
@@ -94,7 +97,10 @@ function App() {
               <Route path="/study/:activityId/flashcards/practice/:wordCount" element={<FlashcardSession />} />
               <Route path="/study/flashcards/:groupId/:activityId" element={<FlashcardSession />} />
               <Route path="/study/:activityId/quiz-setup" element={<QuizSetup />} />
-              <Route path="/study/:activityId/quiz/:sessionId" element={<Quiz />} />
+              <Route path="/study/:activityId/quiz" element={<Quiz />} />
+              <Route path="/study/:activityId/quiz-summary" element={<QuizSummary />} />
+              <Route path="/study/:activityId/writing-setup" element={<WritingSetup />} />
+              <Route path="/study/:activityId/writing" element={<Writing />} />
               <Route path="/words" element={<Words />} />
               <Route path="/words/:id" element={<WordShow />} />
               <Route path="/study-sessions/:id" element={<StudySessionShow />} />
